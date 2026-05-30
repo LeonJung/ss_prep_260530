@@ -5,10 +5,11 @@
 #
 # pip install -r requirements-training.txt
 
-# NumPy must stay <2 so ROS jazzy C-extensions (compiled against NumPy 1.x)
-# don't crash when imported in the same interpreter.
-numpy<2
-
+# lerobot requires numpy>=2.0, but ROS jazzy's cv_bridge.boost C-extension
+# is built against numpy 1.x and crashes under 2.x. We side-step this by
+# NOT installing ros-jazzy-cv-bridge — image decode happens via numpy
+# directly in pai_teach. All other ROS C-extensions are ABI-tolerant.
+#
 # Torch / cuda: pick the wheel matching the training machine's CUDA driver.
 # lerobot currently requires torch>=2.7,<2.12; let the resolver choose when
 # installed alongside lerobot below.
@@ -16,7 +17,7 @@ numpy<2
 
 # LeRobot (HuggingFace) — provides ACT, dataset format, training loop.
 # Pulls in a compatible torch + torchvision automatically.
-lerobot @ git+https://github.com/huggingface/lerobot.git
+lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git
 
 # Logging / experiment tracking (optional but assumed by lerobot examples)
 wandb

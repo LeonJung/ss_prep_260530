@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         > /etc/apt/sources.list.d/ros2.list \
     && apt-get update && apt-get install -y --no-install-recommends \
       ros-jazzy-ros-base \
-      ros-jazzy-cv-bridge \
       ros-jazzy-control-msgs \
       ros-jazzy-trajectory-msgs \
       ros-jazzy-sensor-msgs-py \
@@ -50,21 +49,22 @@ ENV PATH="/opt/venv/bin:${PATH}" \
 RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 
 # --- Python deps (into the venv) -------------------------------------------
-# NumPy is pinned <2 so the ROS jazzy C-extensions (compiled against NumPy
-# 1.x) stay ABI-compatible inside the same interpreter.
-RUN pip install --no-cache-dir "numpy<2"
-
-# Torch + LeRobot together so pip's resolver picks a torch that satisfies
-# lerobot's (currently torch>=2.7,<2.12). The wheel embeds its own CUDA
-# runtime; nvidia-container-toolkit only injects the host driver, which
-# both RTX 2080 (sm_75) and RTX 5000-class (sm_89) GPUs support.
+# lerobot 0.5+ requires numpy>=2.0, but ROS jazzy was built against numpy 1.x
+# — so we keep numpy 2.x in the venv and avoid the one ROS C-extension that
+# can't tolerate that (cv_bridge.boost). Image decode is done in pai_teach
+# via np.frombuffer instead. Everything else (rclpy, sensor_msgs,
+# control_msgs, sensor_msgs_py) is fine across the ABI break.
+#
+# Torch wheel embeds its own CUDA runtime; nvidia-container-toolkit only
+# injects the host driver. Both RTX 2080 (sm_75) and RTX 5000-class (sm_89)
+# are within the wheel's supported compute capabilities.
 RUN pip install --no-cache-dir \
       pyyaml \
       opencv-python-headless \
       tqdm \
       hydra-core \
       omegaconf \
-      "lerobot @ git+https://github.com/huggingface/lerobot.git"
+      "lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git"
 
 # --- ROS2 env auto-source for interactive shells ---------------------------
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /etc/bash.bashrc \

@@ -1,8 +1,9 @@
 """RealSense camera IO: subscribe one or more color streams, expose latest RGB.
 
-Supports both `sensor_msgs/Image` and `sensor_msgs/CompressedImage`. The
-recorder asks for the latest frame; if the camera is configured to publish
-CompressedImage, we decode with OpenCV (jpeg/png) before handing out.
+Supports both `sensor_msgs/Image` and `sensor_msgs/CompressedImage`. We do
+the raw byte → numpy conversion ourselves (NOT via cv_bridge) because
+`cv_bridge.boost` is the one ROS jazzy C-extension that's incompatible with
+the NumPy 2.x ABI required by lerobot.
 
 Images are stored as HxWx3 uint8 RGB.
 """
@@ -15,7 +16,6 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
-from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage, Image
 
@@ -29,11 +29,34 @@ class CameraSpec:
     height: int | None = None
 
 
+def _imgmsg_to_rgb(msg: Image) -> np.ndarray | None:
+    """sensor_msgs/Image -> HxWx3 uint8 RGB, manually (no cv_bridge)."""
+    enc = msg.encoding.lower()
+    h, w = int(msg.height), int(msg.width)
+    raw = np.frombuffer(msg.data, dtype=np.uint8)
+    if enc in ("rgb8", "bgr8"):
+        if raw.size != h * w * 3:
+            return None
+        arr = raw.reshape(h, w, 3)
+        return arr if enc == "rgb8" else arr[..., ::-1].copy()
+    if enc in ("rgba8", "bgra8"):
+        if raw.size != h * w * 4:
+            return None
+        arr = raw.reshape(h, w, 4)[..., :3]
+        return arr if enc == "rgba8" else arr[..., ::-1].copy()
+    if enc in ("mono8", "8uc1"):
+        if raw.size != h * w:
+            return None
+        gray = raw.reshape(h, w)
+        return np.repeat(gray[..., None], 3, axis=2)
+    # Unsupported encoding — caller logs.
+    return None
+
+
 class _SingleCameraIO:
     def __init__(self, node: Node, spec: CameraSpec) -> None:
         self._node = node
         self._spec = spec
-        self._bridge = CvBridge()
         self._lock = threading.Lock()
         self._image: np.ndarray | None = None
         self._stamp = 0.0
@@ -48,13 +71,13 @@ class _SingleCameraIO:
             )
 
     def _on_image(self, msg: Image) -> None:
-        # cv_bridge returns BGR for "bgr8"; convert to RGB for ML use.
-        try:
-            bgr = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        except Exception as e:
-            self._node.get_logger().warn(f"camera '{self._spec.name}' decode error: {e}")
+        rgb = _imgmsg_to_rgb(msg)
+        if rgb is None:
+            self._node.get_logger().warn(
+                f"camera '{self._spec.name}' unsupported encoding "
+                f"or size mismatch (encoding={msg.encoding}, {msg.height}x{msg.width})"
+            )
             return
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         rgb = self._maybe_resize(rgb)
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         with self._lock:
