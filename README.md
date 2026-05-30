@@ -73,6 +73,23 @@ docker compose run --rm pai_teach bash -c '
         --steps 5 --num-workers 0 --batch-size 2
 '
 
+# Full end-to-end sanity (no robot, no cameras — mock ROS publisher emits
+# the production topic schema; full record -> train -> deploy cycle runs)
+docker compose run --rm pai_teach bash -c '
+    source /opt/ros/jazzy/setup.bash &&
+    ros2 run rmw_zenoh_cpp rmw_zenohd > /tmp/zenohd.log 2>&1 & ROUTER=$! &&
+    sleep 2 &&
+    python -m scripts.mock_robot_publisher > /tmp/mock.log 2>&1 & MOCK=$! &&
+    sleep 3 &&
+    python -m scripts.record_demo --repo-id local/mock_e2e \
+        --root datasets/mock_e2e --task mock --max-seconds 5 &&
+    python -m scripts.train_act --repo-id local/mock_e2e \
+        --root datasets/mock_e2e --steps 100 --num-workers 0 --batch-size 2 &&
+    python -m scripts.run_policy --checkpoint checkpoints/act_run/final \
+        --max-seconds 5 ;
+    kill $MOCK $ROUTER
+'
+
 # Record a teleop demo (host network so we see the host/zenoh ROS2 graph)
 docker compose run --rm pai_teach bash -c '
     source /opt/ros/jazzy/setup.bash &&
