@@ -74,6 +74,24 @@ def test_writer_feature_schema_matches_config() -> None:
         assert feats[key]["shape"] == (cam.height, cam.width, 3)
 
 
+def test_act_yaml_loads_with_consistent_image_keys() -> None:
+    """ACTRunConfig parses, and its image_keys match cameras in robot.yaml."""
+    from pai_teach.policy.act.config import ACTRunConfig
+
+    act_cfg = ACTRunConfig.from_yaml(
+        Path(__file__).parent.parent / "pai_teach" / "configs" / "act.yaml"
+    )
+    cam_names_in_robot = {c["name"] for c in _cfg()["cameras"]}
+    assert set(act_cfg.image_keys) == cam_names_in_robot, (
+        f"act.yaml image_keys {act_cfg.image_keys} != "
+        f"robot.yaml cameras {sorted(cam_names_in_robot)}"
+    )
+    assert act_cfg.chunk_size == act_cfg.n_action_steps, (
+        "vanilla ACT: n_action_steps should equal chunk_size"
+    )
+    assert act_cfg.n_obs_steps == 1, "ACT consumes one observation per chunk"
+
+
 def test_recorder_state_to_action_lag_one() -> None:
     """Smoke-test the t->t+1 mapping logic used inside Recorder."""
     from pai_teach.data_recorder.recorder import _state_to_action

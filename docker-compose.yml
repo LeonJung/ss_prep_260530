@@ -1,0 +1,26 @@
+# Single service; run with: `docker compose run --rm pai_teach <cmd>`
+# `network_mode: host` is needed so the in-container ROS2 graph sees
+# topics published on the host (or coming in over zenoh).
+services:
+  pai_teach:
+    build: .
+    image: pai_teach:latest
+    network_mode: host
+    ipc: host
+    environment:
+      - RMW_IMPLEMENTATION=rmw_zenoh_cpp
+      - ROS_DOMAIN_ID=15
+      - HF_HOME=/workspace/.cache/huggingface
+      - WANDB_DIR=/workspace/.cache/wandb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true

@@ -58,6 +58,25 @@ discovery troubleshooting in [`docs/MULTI_PC_SETUP.md`](docs/MULTI_PC_SETUP.md).
 Datasets and checkpoints are **not** committed — transfer them out-of-band
 (rsync, HF Hub, etc.).
 
+## Docker (single image for Controller-PC & Training-PC use)
+
+```bash
+docker build -t pai_teach:latest .
+
+# Sanity ACT train (uses GPU if --gpus all / compose deploy block is honored)
+docker compose run --rm pai_teach \
+    python -m scripts.train_act --config pai_teach/configs/act.yaml --steps 50
+
+# Record a teleop demo (host network so we see the host/zenoh ROS2 graph)
+docker compose run --rm pai_teach \
+    python -m scripts.record_demo --repo-id leonjung/pai_teach_demos \
+    --root datasets/pai_teach_demos --task pick_and_place --max-seconds 30
+```
+
+`docker-compose.yml` mounts the repo at `/workspace`, sets
+`RMW_IMPLEMENTATION=rmw_zenoh_cpp` + `ROS_DOMAIN_ID=15`, and requests all
+GPUs. Needs `nvidia-container-toolkit` on the host.
+
 ## Hardware control packages (do **not** modify here)
 
 | Component | Location | Notes |

@@ -1,0 +1,52 @@
+# ACT (Action Chunking Transformer) training config.
+# Loaded by scripts/train_act.py and translated into LeRobot's ACTConfig.
+# Keep keys close to LeRobot's naming so the mapping is transparent.
+
+dataset:
+  repo_id: leonjung/pai_teach_demos        # set --repo-id on CLI to override
+  root: datasets/pai_teach_demos
+  # Camera key names appearing in observation.images.<name>. Must match the
+  # cameras section in robot.yaml.
+  image_keys: [wrist_cam, scene_cam]
+
+# Action chunking
+chunk_size: 100             # action horizon predicted per forward pass
+n_action_steps: 100         # how many of those to actually execute (== chunk_size for vanilla ACT)
+n_obs_steps: 1              # ACT uses only the current observation
+
+# Transformer (default ACT recipe; small enough to fit 8 GB at batch 4)
+dim_model: 512
+dim_feedforward: 3200
+n_heads: 8
+n_encoder_layers: 4
+n_decoder_layers: 1
+dropout: 0.1
+pre_norm: false
+
+# CVAE
+use_vae: true
+latent_dim: 32
+n_vae_encoder_layers: 4
+kl_weight: 10.0
+
+# Vision backbone
+vision_backbone: resnet18
+replace_final_stride_with_dilation: false
+pretrained_backbone_weights: ResNet18_Weights.IMAGENET1K_V1
+
+# Optimization
+optimizer_lr: 1.0e-5
+optimizer_lr_backbone: 1.0e-5
+optimizer_weight_decay: 1.0e-4
+batch_size: 4               # bump on the training PC (RTX 5000)
+num_workers: 4
+
+# Loop
+training_steps: 100000      # override with --steps for sanity (try --steps 50)
+save_every: 5000
+log_every: 100
+seed: 1000
+
+# Outputs
+output_dir: checkpoints/act_run
+device: cuda                # "cpu" to force a CPU sanity run
