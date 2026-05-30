@@ -67,9 +67,18 @@ Brings up the robot stacks and the cameras (publishers only):
 # Terminal 1 — zenoh router (leave running)
 ros2 run rmw_zenoh_cpp rmw_zenohd
 
-# Terminal 2 — UR10E bilateral teleop
-ros2 launch ur10e_teleop_real_py teleop_real.launch.py \
-    leader_ip:=169.254.186.94 follower_ip:=169.254.186.92
+# Terminal 2 — UR10E teleop  (pick ONE)
+#
+#   (a) UNILATERAL (current default — VIVE tracker → IK → leader/joint_state):
+ros2 launch ur10e_teleop_unilateral_vive_cpp teleop_real.launch.py \
+    follower_ip:=169.254.186.92
+#
+#   (b) BILATERAL (force-feedback, requires UR3e leader arm):
+# ros2 launch ur10e_teleop_real_py teleop_real.launch.py \
+#     leader_ip:=169.254.186.94 follower_ip:=169.254.186.92
+#
+# Both publish the same topics (/ur10e/follower/joint_state, /ur10e/mode);
+# pai_teach is agnostic to which is running.
 
 # Terminal 3 — dg5f right hand (left hand currently at vendor)
 ros2 launch dg5f_hand_bringup dg5f_right_bringup.launch.py \
