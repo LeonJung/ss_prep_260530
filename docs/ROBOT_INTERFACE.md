@@ -113,16 +113,23 @@ Mock variant: `dg5f_right_mock.launch.py` (no device required — useful on this
 
 ## Cameras
 
-Not part of either workspace. To be brought up by their own driver
-(e.g. `realsense2_camera`, `usb_cam`). Once decided, fill in:
+Not part of either workspace. Driver: **`realsense2_camera`** (Intel RealSense).
+Brought up separately from the robot stacks.
+
+Default topic shape from `realsense2_camera` is `/<camera_name>/color/image_raw`
+(plus `/depth/image_rect_raw`, `/color/camera_info`, …) where `<camera_name>`
+is set per node instance.
+
+For the single-arm setup we plan **2 cameras** (placeholder names — confirm at bringup):
 
 | Topic | Type | Resolution | Rate | Mount |
 |-------|------|------------|------|-------|
-| _TBD_ | `sensor_msgs/Image` or `sensor_msgs/CompressedImage` | _TBD_ | _TBD_ | wrist |
-| _TBD_ | … | _TBD_ | _TBD_ | scene |
+| `/wrist_cam/color/image_raw` | `sensor_msgs/Image` | TBD (likely 640×480) | 30 Hz | wrist-mounted |
+| `/scene_cam/color/image_raw` | `sensor_msgs/Image` | TBD | 30 Hz | scene / overview |
 
-For single-arm setup: **2 cameras** (e.g. 1 wrist + 1 scene).
-For dual-arm: 4 cameras.
+For a future dual-arm setup: 4 cameras (left/right wrist + 2 scene).
+
+Open: do we need depth streams as ACT inputs? Default for now is **RGB only** (ACT recipes generally use RGB).
 
 ---
 
@@ -138,9 +145,20 @@ Used during teleop only. Listed for completeness:
 
 ## Design implications for `ros2_bridge`
 
-1. **Data recording** uses path A topics (`/ur10e/follower/joint_state` + `/dg5f_right/joint_states` + camera image topics).
-2. **Policy deployment** needs to pick a command interface for each robot. Open questions tracked in `ARCHITECTURE.md`:
-   - UR10E: `joint_trajectory_controller` action (chunked trajectory) vs `forward_position_controller` topic (sample-by-sample). ACT-style action chunks map naturally to either.
-   - dg5f: `effort_controller` topic (raw torque, harder for ACT to learn) vs PID position controller (smoother target). Recommend PID position for first experiments.
-3. **Rate mismatch**: UR ~50–100 Hz, dg5f ~300 Hz, cameras typically 30 Hz. Recorder will use a single common rate (likely 30 Hz, matching cameras) and ZOH-resample / drop the rest.
+1. **Data recording** uses path A topics (`/ur10e/follower/joint_state` + `/dg5f_right/joint_states` + RealSense color topics).
+2. **Policy deployment** command interfaces (current plan, see "Decisions" below):
+   - UR10E: **`joint_trajectory_controller`** action by default (chunked trajectory, smoother + safer). `forward_position_controller` kept as a switchable alternative in config for low-latency experiments.
+   - dg5f: **PID joint-position JTC** (`/dg5f_right/dg5f_right_controller/follow_joint_trajectory`) — ACT outputs joint position targets, controller's PID converts to effort. Easier to learn than raw effort.
+3. **Rate mismatch**: UR ~50–100 Hz, dg5f ~300 Hz, RealSense ~30 Hz. Recorder will sample at the camera rate (30 Hz) and use the most-recent robot state via message_filters / latched cache.
 4. **Joint order is fixed** for both robots — bake the canonical order into `pai_teach/configs/robot.yaml` so the dataset and the runner agree.
+
+## Decisions (as of 2026-05-30)
+
+| Topic | Decision | Status |
+|-------|----------|--------|
+| ACT framework | LeRobot | confirmed |
+| dg5f command interface | PID Joint-Trajectory Controller (`dg5f_right_controller`) | confirmed |
+| Camera driver | `realsense2_camera`, RGB only (default) | confirmed |
+| UR10E policy-deployment controller | **JTC default, forward_position as switchable alt** (Claude's recommendation) | awaiting user confirmation |
+| Number of cameras | 2 (single-arm: 1 wrist + 1 scene) | confirmed |
+| ROS2 distro | Jazzy (both PCs) | confirmed |
