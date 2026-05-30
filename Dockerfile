@@ -37,19 +37,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-jazzy-trajectory-msgs \
       ros-jazzy-sensor-msgs-py \
       ros-jazzy-rmw-zenoh-cpp \
-      python3-colcon-common-extensions \
+      python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Python deps -----------------------------------------------------------
-# PyTorch wheel embeds its own CUDA runtime; only the host NVIDIA driver
-# matters (nvidia-container-toolkit injects it). cu124 wheel supports
-# everything from RTX 2080 (sm_75) up to RTX 5000-class (sm_89).
-RUN python3 -m pip install --no-cache-dir --break-system-packages \
-      --index-url https://download.pytorch.org/whl/cu124 \
-      torch==2.5.1 torchvision==0.20.1
+# --- Isolated Python venv (sees ROS system site-packages for rclpy) --------
+# Using a venv side-steps PEP 668 / Debian-managed package conflicts (e.g.
+# `packaging` not having a RECORD file) that --break-system-packages cannot
+# work around.
+RUN python3 -m venv --system-site-packages /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}" \
+    VIRTUAL_ENV="/opt/venv"
+RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages \
-      numpy \
+# --- Python deps (into the venv) -------------------------------------------
+# NumPy is pinned <2 so the ROS jazzy C-extensions (compiled against NumPy
+# 1.x) stay ABI-compatible inside the same interpreter.
+RUN pip install --no-cache-dir "numpy<2"
+
+# Torch + LeRobot together so pip's resolver picks a torch that satisfies
+# lerobot's (currently torch>=2.7,<2.12). The wheel embeds its own CUDA
+# runtime; nvidia-container-toolkit only injects the host driver, which
+# both RTX 2080 (sm_75) and RTX 5000-class (sm_89) GPUs support.
+RUN pip install --no-cache-dir \
       pyyaml \
       opencv-python-headless \
       tqdm \

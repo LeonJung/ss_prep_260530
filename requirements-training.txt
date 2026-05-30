@@ -1,16 +1,21 @@
 # Install on the TRAINING MACHINE only (heavy ML deps).
 # On the dev (push) machine these can be skipped.
 #
-# pip install -r requirements-training.txt
+# Preferred path: use the Dockerfile. This file is for native installs.
 #
-# torch / cuda: pick the wheel matching the training machine's CUDA.
+# pip install -r requirements-training.txt
+
+# NumPy must stay <2 so ROS jazzy C-extensions (compiled against NumPy 1.x)
+# don't crash when imported in the same interpreter.
+numpy<2
+
+# Torch / cuda: pick the wheel matching the training machine's CUDA driver.
+# lerobot currently requires torch>=2.7,<2.12; let the resolver choose when
+# installed alongside lerobot below.
 # See https://pytorch.org/get-started/locally/
 
-torch>=2.3
-torchvision>=0.18
-
-# LeRobot (HuggingFace) — provides ACT, dataset format, training loop
-# Pin to a tested commit later; for now track main.
+# LeRobot (HuggingFace) — provides ACT, dataset format, training loop.
+# Pulls in a compatible torch + torchvision automatically.
 lerobot @ git+https://github.com/huggingface/lerobot.git
 
 # Logging / experiment tracking (optional but assumed by lerobot examples)
