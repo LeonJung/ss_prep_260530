@@ -146,9 +146,9 @@ Used during teleop only. Listed for completeness:
 ## Design implications for `ros2_bridge`
 
 1. **Data recording** uses path A topics (`/ur10e/follower/joint_state` + `/dg5f_right/joint_states` + RealSense color topics).
-2. **Policy deployment** command interfaces (current plan, see "Decisions" below):
-   - UR10E: **`joint_trajectory_controller`** action by default (chunked trajectory, smoother + safer). `forward_position_controller` kept as a switchable alternative in config for low-latency experiments.
-   - dg5f: **PID joint-position JTC** (`/dg5f_right/dg5f_right_controller/follow_joint_trajectory`) — ACT outputs joint position targets, controller's PID converts to effort. Easier to learn than raw effort.
+2. **Policy deployment** command interfaces:
+   - UR10E: **`joint_trajectory_controller`** action (`/joint_trajectory_controller/follow_joint_trajectory`). ACT chunks are wrapped as short trajectories with `time_from_start` per step.
+   - dg5f: **PID joint-position JTC** (`/dg5f_right/dg5f_right_controller/follow_joint_trajectory`) — ACT outputs joint position targets, controller's PID converts to effort.
 3. **Rate mismatch**: UR ~50–100 Hz, dg5f ~300 Hz, RealSense ~30 Hz. Recorder will sample at the camera rate (30 Hz) and use the most-recent robot state via message_filters / latched cache.
 4. **Joint order is fixed** for both robots — bake the canonical order into `pai_teach/configs/robot.yaml` so the dataset and the runner agree.
 
@@ -159,6 +159,6 @@ Used during teleop only. Listed for completeness:
 | ACT framework | LeRobot | confirmed |
 | dg5f command interface | PID Joint-Trajectory Controller (`dg5f_right_controller`) | confirmed |
 | Camera driver | `realsense2_camera`, RGB only (default) | confirmed |
-| UR10E policy-deployment controller | **JTC default, forward_position as switchable alt** (Claude's recommendation) | awaiting user confirmation |
+| UR10E policy-deployment controller | **`joint_trajectory_controller` (JTC)** via `FollowJointTrajectory` action | confirmed |
 | Number of cameras | 2 (single-arm: 1 wrist + 1 scene) | confirmed |
 | ROS2 distro | Jazzy (both PCs) | confirmed |
