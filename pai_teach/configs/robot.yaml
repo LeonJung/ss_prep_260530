@@ -1,0 +1,65 @@
+# Single source of truth for robot topic/joint contracts.
+# Both ros2_bridge and data_recorder read this — keep names exact.
+
+ur10e:
+  # Record-time state (teleop running): published by ur10e_teleop_real_py
+  state_topic_teleop: /ur10e/follower/joint_state
+  # Deploy-time state (ros2_control native)
+  state_topic_deploy: /joint_states
+  # Deploy-time command (JTC action)
+  command_action: /joint_trajectory_controller/follow_joint_trajectory
+  joint_names:
+    - shoulder_pan_joint
+    - shoulder_lift_joint
+    - elbow_joint
+    - wrist_1_joint
+    - wrist_2_joint
+    - wrist_3_joint
+  dof: 6
+
+dg5f:
+  side: right                       # right | left
+  state_topic: /dg5f_right/joint_states
+  command_action: /dg5f_right/dg5f_right_controller/follow_joint_trajectory
+  # Joint name pattern is rj_dg_{finger}_{joint}, finger 1..5, joint 1..4.
+  joint_names:
+    - rj_dg_1_1
+    - rj_dg_1_2
+    - rj_dg_1_3
+    - rj_dg_1_4
+    - rj_dg_2_1
+    - rj_dg_2_2
+    - rj_dg_2_3
+    - rj_dg_2_4
+    - rj_dg_3_1
+    - rj_dg_3_2
+    - rj_dg_3_3
+    - rj_dg_3_4
+    - rj_dg_4_1
+    - rj_dg_4_2
+    - rj_dg_4_3
+    - rj_dg_4_4
+    - rj_dg_5_1
+    - rj_dg_5_2
+    - rj_dg_5_3
+    - rj_dg_5_4
+  dof: 20
+
+cameras:
+  # Topic names assume realsense2_camera launched with camera_name=<key>.
+  # Confirm at bringup time on the training PC and update if different.
+  - name: wrist_cam
+    topic: /wrist_cam/color/image_raw
+    compressed: false               # true -> /wrist_cam/color/image_raw/compressed
+    width: 640
+    height: 480
+    rate_hz: 30
+  - name: scene_cam
+    topic: /scene_cam/color/image_raw
+    compressed: false
+    width: 640
+    height: 480
+    rate_hz: 30
+
+# Recorder loop rate. Camera rate is the bottleneck → match it.
+record_rate_hz: 30
