@@ -97,8 +97,22 @@ def _build_act_config(run_cfg: ACTRunConfig, dataset) -> object:
 
 def _load_dataset(run_cfg: ACTRunConfig):
     _, _, LeRobotDataset = _import_lerobot()
-    # LeRobotDataset(repo_id, root) loads an existing dataset from disk.
-    return LeRobotDataset(repo_id=run_cfg.repo_id, root=run_cfg.dataset_root)
+    # ACT consumes a chunk of `chunk_size` future actions per step (and the
+    # current observation only — n_obs_steps=1). Build the delta_timestamps
+    # mapping that LeRobotDataset uses to stack adjacent frames on __getitem__.
+    # We compute it after a first peek at the dataset's fps so the offsets
+    # are in seconds, not frames.
+    base = LeRobotDataset(repo_id=run_cfg.repo_id, root=run_cfg.dataset_root)
+    fps = base.fps
+    del base
+    delta_timestamps = {
+        "action": [i / fps for i in range(run_cfg.chunk_size)],
+    }
+    return LeRobotDataset(
+        repo_id=run_cfg.repo_id,
+        root=run_cfg.dataset_root,
+        delta_timestamps=delta_timestamps,
+    )
 
 
 def train(run_cfg: ACTRunConfig, override_steps: int | None = None) -> Path:
@@ -156,7 +170,16 @@ def train(run_cfg: ACTRunConfig, override_steps: int | None = None) -> Path:
 
         batch = {k: v.to(device, non_blocking=True) if torch.is_tensor(v) else v for k, v in batch.items()}
         out = policy.forward(batch)
-        loss = out["loss"] if isinstance(out, dict) else out
+        # LeRobot ACTPolicy.forward returns one of:
+        #   - dict with "loss" key (older API)
+        #   - (loss_tensor, info_dict) tuple (newer API)
+        #   - bare loss tensor
+        if isinstance(out, dict):
+            loss = out["loss"]
+        elif isinstance(out, tuple):
+            loss = out[0]
+        else:
+            loss = out
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()

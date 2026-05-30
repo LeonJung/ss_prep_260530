@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-jazzy-sensor-msgs-py \
       ros-jazzy-rmw-zenoh-cpp \
       python3-venv \
+      ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Isolated Python venv (sees ROS system site-packages for rclpy) --------

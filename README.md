@@ -63,19 +63,34 @@ Datasets and checkpoints are **not** committed — transfer them out-of-band
 ```bash
 docker build -t pai_teach:latest .
 
-# Sanity ACT train (uses GPU if --gpus all / compose deploy block is honored)
-docker compose run --rm pai_teach \
-    python -m scripts.train_act --config pai_teach/configs/act.yaml --steps 50
+# Sanity check (no robot needed — generates a tiny dataset + trains 5 steps)
+docker compose run --rm pai_teach bash -c '
+    source /opt/ros/jazzy/setup.bash &&
+    python -m scripts.make_dummy_dataset --root datasets/dummy \
+        --repo-id local/dummy --episodes 2 --frames 64 &&
+    python -m scripts.train_act --config pai_teach/configs/act.yaml \
+        --repo-id local/dummy --root datasets/dummy \
+        --steps 5 --num-workers 0 --batch-size 2
+'
 
 # Record a teleop demo (host network so we see the host/zenoh ROS2 graph)
-docker compose run --rm pai_teach \
+docker compose run --rm pai_teach bash -c '
+    source /opt/ros/jazzy/setup.bash &&
     python -m scripts.record_demo --repo-id leonjung/pai_teach_demos \
-    --root datasets/pai_teach_demos --task pick_and_place --max-seconds 30
+        --root datasets/pai_teach_demos --task pick_and_place --max-seconds 30
+'
 ```
 
 `docker-compose.yml` mounts the repo at `/workspace`, sets
-`RMW_IMPLEMENTATION=rmw_zenoh_cpp` + `ROS_DOMAIN_ID=15`, and requests all
-GPUs. Needs `nvidia-container-toolkit` on the host.
+`RMW_IMPLEMENTATION=rmw_zenoh_cpp` + `ROS_DOMAIN_ID=15`, `ipc: host` (for
+DataLoader shared memory), requests all GPUs, and uses `network_mode: host`
+so the in-container ROS2 graph sees the host. Needs
+`nvidia-container-toolkit` on the host.
+
+The ROS env must be sourced inside the container before running any
+script (`source /opt/ros/jazzy/setup.bash`) — `bash -lc` skips
+`/etc/bash.bashrc`. We do this inline above; if you `docker compose exec`
+into a shell instead it gets sourced automatically.
 
 ## Hardware control packages (do **not** modify here)
 
@@ -93,5 +108,5 @@ This repo only contains thin adapters that *consume* the topics those packages e
 - [x] ros2_bridge: UR10E state/cmd (JTC for deploy)
 - [x] ros2_bridge: dg5f state/cmd (multi-DOF PidController + `MultiDOFCommand`)
 - [x] data_recorder: write LeRobot-format episodes
-- [ ] policy/act: training script
+- [x] policy/act: training script (sanity-tested end-to-end on dummy dataset)
 - [ ] policy/runner: ROS2 deployment

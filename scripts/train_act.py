@@ -36,6 +36,14 @@ def _parse() -> argparse.Namespace:
         "--device", default=None,
         help="override device (e.g. cpu)",
     )
+    p.add_argument(
+        "--num-workers", type=int, default=None,
+        help="override DataLoader num_workers (set 0 for tiny datasets / sanity runs)",
+    )
+    p.add_argument(
+        "--batch-size", type=int, default=None,
+        help="override batch_size",
+    )
     return p.parse_args()
 
 
@@ -48,6 +56,10 @@ def main() -> None:
         run_cfg.dataset_root = args.root
     if args.device is not None:
         run_cfg.device = args.device
+    if args.num_workers is not None:
+        run_cfg.num_workers = args.num_workers
+    if args.batch_size is not None:
+        run_cfg.batch_size = args.batch_size
 
     # Defer heavy import until after CLI parsing.
     from pai_teach.policy.act.train import train
