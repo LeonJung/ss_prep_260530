@@ -109,4 +109,4 @@ This repo only contains thin adapters that *consume* the topics those packages e
 - [x] ros2_bridge: dg5f state/cmd (multi-DOF PidController + `MultiDOFCommand`)
 - [x] data_recorder: write LeRobot-format episodes
 - [x] policy/act: training script (sanity-tested end-to-end on dummy dataset)
-- [ ] policy/runner: ROS2 deployment
+- [x] policy/runner: ROS2 deployment (select_action sanity-tested; live RobotIO loop pending controller PC + robot)
