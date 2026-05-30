@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.venv/
+venv/
+env/
+.eggs/
+build/
+dist/
+*.egg
+
+# ROS2 / colcon
+build/
+install/
+log/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large/runtime artifacts — sync out-of-band, not via git.
+# (Ignore contents but keep the directory placeholder READMEs.)
+datasets/*
+checkpoints/*
+!datasets/README.md
+!checkpoints/README.md
+
+wandb/
+runs/
+*.bag
+*.mcap
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.parquet
+
+# Local-only configs / secrets
+.env
+*.local.yaml
+*.local.yml
+
+# Session / agent state
+SESSION_LOG.md
+.claude/

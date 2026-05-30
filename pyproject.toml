@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pai_teach"
+version = "0.0.1"
+description = "Physical AI direct-teaching framework: UR10E + dg5f teleop -> ACT (LeRobot)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Leon Jung", email = "jung.ryuwoon@gmail.com" }]
+
+# Runtime deps. Heavy ML deps (torch, lerobot) intentionally NOT pinned here;
+# install them via requirements-training.txt on the training machine.
+dependencies = [
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "opencv-python>=4.8",
+    "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "ruff>=0.5", "pre-commit>=3.5"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pai_teach*"]
+exclude = ["tests*", "scripts*", "datasets*", "checkpoints*", "docs*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
