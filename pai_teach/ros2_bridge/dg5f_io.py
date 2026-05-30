@@ -1,10 +1,14 @@
 """dg5f (5-finger hand, 20 DoF) ROS2 IO.
 
-State:   /dg5f_<side>/joint_states (~300 Hz)
-Command: /dg5f_<side>/dg5f_<side>_controller/follow_joint_trajectory  (PID JTC)
+State:   /dg5f_<side>/joint_states  (~300 Hz, sensor_msgs/JointState)
+Command: /dg5f_<side>/<controller>/reference  (control_msgs/MultiDOFCommand)
 
-The hardware command interface is effort-only; the JTC's PID converts our
-position targets to motor current internally.
+The production controller is a single multi-DOF `pid_controller/PidController`
+(`rj_dg_pospid` for right, `lj_dg_pospid` for left). Reference is published
+as `MultiDOFCommand{dof_names, values, values_dot}` at ~50 Hz. The
+controller's command_interface is `effort` and `reference_and_state_interfaces`
+is `[position]` — i.e. we publish position references and PID converts to
+motor current internally.
 """
 
 from __future__ import annotations
@@ -24,12 +28,12 @@ class DG5FIO:
         node: Node,
         joint_names: list[str],
         state_topic: str,
-        command_action: str | None = None,
+        command_topic: str | None = None,
     ) -> None:
         self._node = node
         self._joint_names = list(joint_names)
         self._dof = len(joint_names)
-        self._command_action = command_action
+        self._command_topic = command_topic
 
         self._lock = threading.Lock()
         self._position = np.zeros(self._dof, dtype=np.float32)
@@ -43,15 +47,14 @@ class DG5FIO:
             JointState, state_topic, self._on_joint_state, 30
         )
 
-        self._action_client = None  # lazily created in deploy mode
-        if command_action is not None:
-            from control_msgs.action import FollowJointTrajectory
-            from rclpy.action import ActionClient
+        self._cmd_pub = None
+        self._MultiDOFCommand = None
+        if command_topic is not None:
+            # Lazy: control_msgs may not be installed on the dev box.
+            from control_msgs.msg import MultiDOFCommand
 
-            self._FollowJointTrajectory = FollowJointTrajectory
-            self._action_client = ActionClient(
-                node, FollowJointTrajectory, command_action
-            )
+            self._MultiDOFCommand = MultiDOFCommand
+            self._cmd_pub = node.create_publisher(MultiDOFCommand, command_topic, 10)
 
     def _on_joint_state(self, msg: JointState) -> None:
         if self._name_to_idx is None:
@@ -98,35 +101,25 @@ class DG5FIO:
                 self._stamp,
             )
 
-    def send_joint_position(
-        self, position: np.ndarray, time_from_start_s: float = 0.05
-    ) -> None:
-        if self._action_client is None:
+    def send_joint_position(self, position: np.ndarray) -> None:
+        """Publish one MultiDOFCommand frame with the given joint positions.
+
+        The PidController consumes this as the reference; rate is up to the
+        caller (production teleop is 50 Hz).
+        """
+        if self._cmd_pub is None:
             raise RuntimeError(
-                "DG5FIO has no command_action configured (record-only mode)"
+                "DG5FIO has no command_topic configured (record-only mode)"
             )
         if position.shape != (self._dof,):
             raise ValueError(
                 f"position shape {position.shape} != expected ({self._dof},)"
             )
-        if not self._action_client.server_is_ready():
-            self._node.get_logger().warn(
-                f"DG5FIO: JTC action server {self._command_action} not ready"
-            )
-            return
-
-        from builtin_interfaces.msg import Duration
-        from trajectory_msgs.msg import JointTrajectoryPoint
-
-        goal = self._FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = self._joint_names
-        point = JointTrajectoryPoint()
-        point.positions = [float(x) for x in position]
-        sec = int(time_from_start_s)
-        nsec = int((time_from_start_s - sec) * 1e9)
-        point.time_from_start = Duration(sec=sec, nanosec=nsec)
-        goal.trajectory.points = [point]
-        self._action_client.send_goal_async(goal)
+        msg = self._MultiDOFCommand()
+        msg.dof_names = list(self._joint_names)
+        msg.values = [float(x) for x in position]
+        msg.values_dot = [0.0] * self._dof
+        self._cmd_pub.publish(msg)
 
     def wait_for_state(self, timeout_s: float = 5.0) -> bool:
         deadline = time.monotonic() + timeout_s

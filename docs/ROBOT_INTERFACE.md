@@ -90,13 +90,23 @@ production default. PID-based trajectory variants also exist.
 
 ### Command
 
-| Controller | Topic / Action | Type | Notes |
-|-----------|---------------|------|-------|
-| `effort_controller` (default / production) | `/dg5f_right/effort_controller/command` | `std_msgs/Float64MultiArray` (20 floats) | direct torque/current cmd |
-| `dg5f_right_controller` (JTC w/ PID, effort-driven) | `/dg5f_right/dg5f_right_controller/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | position target → PID → effort |
-| `dg5f_right_pid_all_controller` | `/dg5f_right/dg5f_right_pid_all_controller/command` | `std_msgs/Float64MultiArray` (20 floats) | position cmd via PID |
+**Production** uses a single multi-DOF `pid_controller/PidController` named
+`rj_dg_pospid` (right) / `lj_dg_pospid` (left). Reference is published as
+`control_msgs/MultiDOFCommand` at ~50 Hz on the controller's reference topic:
 
-Hardware-level command interface is **effort only** (motor current). Position control is achieved via a PID loop in the controller (not in hardware).
+| Controller | Topic | Type | Notes |
+|-----------|-------|------|-------|
+| **`rj_dg_pospid`** (production) | `/dg5f_right/rj_dg_pospid/reference` | `control_msgs/MultiDOFCommand` | `dof_names`+`values` (20 position refs), `command_interface: effort`, `reference_and_state_interfaces: [position]`. 50 Hz typical. |
+| `dg5f_right_controller` (MoveIt) | `/dg5f_right/dg5f_right_controller/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | Used by MoveIt integration; NOT the production teleop/policy path. |
+
+`MultiDOFCommand` shape:
+```
+dof_names: ["rj_dg_1_1", "rj_dg_1_2", ..., "rj_dg_5_4"]   # 20 joints
+values:    [pos_rad, ...]                                  # length 20
+values_dot:[0.0,    ...]                                   # length 20 (vel ref; 0 for pure pos)
+```
+
+Hardware-level command interface is **effort only** (motor current). Position control is achieved via the PID loop in the controller (not in hardware).
 
 ### Launch
 
@@ -148,7 +158,7 @@ Used during teleop only. Listed for completeness:
 1. **Data recording** uses path A topics (`/ur10e/follower/joint_state` + `/dg5f_right/joint_states` + RealSense color topics).
 2. **Policy deployment** command interfaces:
    - UR10E: **`joint_trajectory_controller`** action (`/joint_trajectory_controller/follow_joint_trajectory`). ACT chunks are wrapped as short trajectories with `time_from_start` per step.
-   - dg5f: **PID joint-position JTC** (`/dg5f_right/dg5f_right_controller/follow_joint_trajectory`) — ACT outputs joint position targets, controller's PID converts to effort.
+   - dg5f: **multi-DOF PidController** publishing `control_msgs/MultiDOFCommand` on `/dg5f_right/rj_dg_pospid/reference` at 50 Hz. ACT outputs joint position targets, controller's PID converts to effort.
 3. **Rate mismatch**: UR ~50–100 Hz, dg5f ~300 Hz, RealSense ~30 Hz. Recorder will sample at the camera rate (30 Hz) and use the most-recent robot state via message_filters / latched cache.
 4. **Joint order is fixed** for both robots — bake the canonical order into `pai_teach/configs/robot.yaml` so the dataset and the runner agree.
 
@@ -157,7 +167,7 @@ Used during teleop only. Listed for completeness:
 | Topic | Decision | Status |
 |-------|----------|--------|
 | ACT framework | LeRobot | confirmed |
-| dg5f command interface | PID Joint-Trajectory Controller (`dg5f_right_controller`) | confirmed |
+| dg5f command interface | multi-DOF `pid_controller/PidController` (`rj_dg_pospid`), `MultiDOFCommand` on `…/reference` | confirmed 2026-05-30 from hand_ws/src |
 | Camera driver | `realsense2_camera`, RGB only (default) | confirmed |
 | UR10E policy-deployment controller | **`joint_trajectory_controller` (JTC)** via `FollowJointTrajectory` action | confirmed |
 | Number of cameras | 2 (single-arm: 1 wrist + 1 scene) | confirmed |

@@ -61,12 +61,12 @@ class RobotIO:
         )
 
         hand_cfg = config["dg5f"]
-        hand_cmd = hand_cfg["command_action"] if mode == "deploy" else None
+        hand_cmd = hand_cfg["command_topic"] if mode == "deploy" else None
         self.dg5f = DG5FIO(
             self._node,
             joint_names=hand_cfg["joint_names"],
             state_topic=hand_cfg["state_topic"],
-            command_action=hand_cmd,
+            command_topic=hand_cmd,
         )
 
         cam_specs = [
@@ -154,7 +154,10 @@ class RobotIO:
         if self._mode != "deploy":
             raise RuntimeError(
                 "send_action is only valid in 'deploy' mode "
-                "(record mode has no command action clients)"
+                "(record mode has no command publishers)"
             )
+        # UR10E uses JTC (action) — needs a time_from_start.
+        # dg5f uses a multi-DOF PidController (publisher) — no horizon, just
+        # publish the next position reference; PID does the rest.
         self.ur10e.send_joint_position(action.ur10e_position, time_from_start_s)
-        self.dg5f.send_joint_position(action.dg5f_position, time_from_start_s)
+        self.dg5f.send_joint_position(action.dg5f_position)

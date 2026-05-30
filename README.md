@@ -43,14 +43,20 @@ docs/                   Design / interface notes
 tests/                  Unit tests
 ```
 
-## Two-machine workflow
+## Three-machine workflow
 
-This repository is developed on one machine and executed on another:
+| Role | Runs |
+|------|------|
+| **Dev PC** (this repo's editor) | edits code, pushes to GitHub, light import / unit tests |
+| **Controller PC** | `ur10e_teleop_real_py`, `dg5f_hand_bringup`, `realsense2_camera` (publishers only) |
+| **Training PC** (RTX 5000-class GPU) | pulls this repo, runs `record_demo` / `train_act` / `run_policy` |
 
-1. **Dev machine** (this PC): writes/edits code, pushes to GitHub
-2. **Training machine**: pulls and runs (data collection, training, deployment)
+ROS2 middleware: **`rmw_zenoh_cpp`**, `ROS_DOMAIN_ID=15`. A `rmw_zenohd`
+router must be running on the controller PC. Full setup, IPs, and
+discovery troubleshooting in [`docs/MULTI_PC_SETUP.md`](docs/MULTI_PC_SETUP.md).
 
-Sync via this repo. Datasets and checkpoints are **not** committed — transfer them out-of-band (rsync, HF Hub, etc.).
+Datasets and checkpoints are **not** committed — transfer them out-of-band
+(rsync, HF Hub, etc.).
 
 ## Hardware control packages (do **not** modify here)
 
@@ -64,9 +70,9 @@ This repo only contains thin adapters that *consume* the topics those packages e
 
 ## Status
 
-- [ ] Robot ROS2 interface survey (`docs/ROBOT_INTERFACE.md`)
-- [ ] ros2_bridge: UR10E state/cmd
-- [ ] ros2_bridge: dg5f state/cmd
-- [ ] data_recorder: write LeRobot-format episodes
+- [x] Robot ROS2 interface survey (`docs/ROBOT_INTERFACE.md`)
+- [x] ros2_bridge: UR10E state/cmd (JTC for deploy)
+- [x] ros2_bridge: dg5f state/cmd (multi-DOF PidController + `MultiDOFCommand`)
+- [x] data_recorder: write LeRobot-format episodes
 - [ ] policy/act: training script
 - [ ] policy/runner: ROS2 deployment
