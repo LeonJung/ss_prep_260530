@@ -40,6 +40,12 @@ def _parse() -> argparse.Namespace:
         "--max-seconds", type=float, default=None,
         help="auto-stop after this many seconds (Ctrl-C stops earlier)",
     )
+    p.add_argument(
+        "--dg5f",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="override config.dg5f.enabled (must match how the checkpoint was trained)",
+    )
     return p.parse_args()
 
 
@@ -57,6 +63,7 @@ def main() -> None:
         robot_config_path=args.config,
         device=args.device,
         rate_hz=args.rate,
+        dg5f_enabled=args.dg5f,
     ) as runner:
         n = runner.run(max_seconds=args.max_seconds)
         print(f"[run_policy] sent {n} action steps")

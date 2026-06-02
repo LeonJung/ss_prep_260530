@@ -41,16 +41,25 @@ class Recorder:
         repo_id: str,
         dataset_root: str | Path,
         task: str,
+        *,
+        dg5f_enabled: bool | None = None,
     ) -> None:
         self._cfg = yaml.safe_load(Path(config_path).read_text())
+        if dg5f_enabled is not None:
+            self._cfg["dg5f"]["enabled"] = bool(dg5f_enabled)
         self._task = task
         self._rate_hz = int(self._cfg.get("record_rate_hz", 30))
+        # If dg5f is disabled at the IO layer, the dataset must also collapse
+        # to UR-only — otherwise state/action shape mismatches the empty
+        # arrays Observation/Action carry.
+        dg5f_enabled = bool(self._cfg["dg5f"].get("enabled", True))
+        dg5f_names = self._cfg["dg5f"]["joint_names"] if dg5f_enabled else []
         self._writer = LeRobotWriter(
             repo_id=repo_id,
             root=dataset_root,
             fps=self._rate_hz,
             ur10e_joint_names=self._cfg["ur10e"]["joint_names"],
-            dg5f_joint_names=self._cfg["dg5f"]["joint_names"],
+            dg5f_joint_names=dg5f_names,
             cameras=_cameras_from_cfg(self._cfg),
         )
         # Lazy import so this module is importable on dev boxes without rclpy.

@@ -27,12 +27,22 @@ class ACTRunner:
         robot_config_path: str | Path,
         device: str = "cuda",
         rate_hz: float | None = None,
+        *,
+        dg5f_enabled: bool | None = None,
     ) -> None:
         self._cfg = yaml.safe_load(Path(robot_config_path).read_text())
+        if dg5f_enabled is not None:
+            self._cfg["dg5f"]["enabled"] = bool(dg5f_enabled)
         self._rate_hz = float(rate_hz) if rate_hz else float(self._cfg.get("record_rate_hz", 30))
         self._cam_names = [c["name"] for c in self._cfg.get("cameras", [])]
         self._ur_dof = int(self._cfg["ur10e"]["dof"])
-        self._hand_dof = int(self._cfg["dg5f"]["dof"])
+        # When dg5f is disabled, the trained policy was 6-dim and there are no
+        # hand joints to split out.
+        self._hand_dof = (
+            int(self._cfg["dg5f"]["dof"])
+            if self._cfg["dg5f"].get("enabled", True)
+            else 0
+        )
         self._device = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
 
         # Lazy imports: lerobot needs torch + the package; ros2_bridge needs rclpy.

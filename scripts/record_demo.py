@@ -50,6 +50,12 @@ def _parse() -> argparse.Namespace:
         default=None,
         help="auto-stop after this many seconds (Ctrl-C stops earlier)",
     )
+    p.add_argument(
+        "--dg5f",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="override config.dg5f.enabled (--no-dg5f when hand is unplugged)",
+    )
     return p.parse_args()
 
 
@@ -62,6 +68,7 @@ def main() -> None:
         repo_id=args.repo_id,
         dataset_root=args.root,
         task=args.task,
+        dg5f_enabled=args.dg5f,
     ) as rec:
         n = rec.record_episode(max_seconds=args.max_seconds)
         print(f"[record_demo] saved episode with {n} frames")

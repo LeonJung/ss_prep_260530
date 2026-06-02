@@ -18,6 +18,11 @@ ur10e:
   dof: 6
 
 dg5f:
+  # Toggle the whole hand off if the device isn't connected — RobotIO will
+  # skip the subscriber/publisher, recorder writes UR-only state/action,
+  # and ACT trains a 6-dim policy. CLI scripts accept --no-dg5f / --dg5f
+  # to override this default per-run.
+  enabled: true
   side: right                       # right | left  (left hand currently at vendor for repair)
   state_topic: /dg5f_right/joint_states
   # Production controller is a single multi-DOF pid_controller/PidController

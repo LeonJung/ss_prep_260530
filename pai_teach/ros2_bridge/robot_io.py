@@ -7,6 +7,10 @@ Consumers (recorder, runner) don't touch rclpy directly. Use as:
         obs = io.get_observation()
         # ... at deploy time:
         io.send_action(Action(ur10e_position=..., dg5f_position=...))
+
+`config["dg5f"]["enabled"]` toggles the hand off; when disabled, observations
+carry a zero-length dg5f_position/velocity/effort, send_action does nothing
+on the hand side, and the dataset/policy collapse to a UR-only 6-dim space.
 """
 
 from __future__ import annotations
@@ -61,13 +65,20 @@ class RobotIO:
         )
 
         hand_cfg = config["dg5f"]
-        hand_cmd = hand_cfg["command_topic"] if mode == "deploy" else None
-        self.dg5f = DG5FIO(
-            self._node,
-            joint_names=hand_cfg["joint_names"],
-            state_topic=hand_cfg["state_topic"],
-            command_topic=hand_cmd,
-        )
+        self._dg5f_enabled = bool(hand_cfg.get("enabled", True))
+        if self._dg5f_enabled:
+            hand_cmd = hand_cfg["command_topic"] if mode == "deploy" else None
+            self.dg5f: DG5FIO | None = DG5FIO(
+                self._node,
+                joint_names=hand_cfg["joint_names"],
+                state_topic=hand_cfg["state_topic"],
+                command_topic=hand_cmd,
+            )
+        else:
+            self.dg5f = None
+            self._node.get_logger().info(
+                "RobotIO: dg5f.enabled=false — hand subscriber/publisher skipped"
+            )
 
         cam_specs = [
             CameraSpec(
@@ -117,7 +128,11 @@ class RobotIO:
         """Block until all subscriptions have produced at least one message."""
         deadline = time.monotonic() + timeout_s
         ok_ur = self.ur10e.wait_for_state(max(0.1, deadline - time.monotonic()))
-        ok_hand = self.dg5f.wait_for_state(max(0.1, deadline - time.monotonic()))
+        ok_hand = (
+            self.dg5f.wait_for_state(max(0.1, deadline - time.monotonic()))
+            if self.dg5f is not None
+            else True
+        )
         ok_cams = self.cameras.wait_for_all(max(0.1, deadline - time.monotonic()))
         if not (ok_ur and ok_hand and ok_cams):
             missing = []
@@ -135,7 +150,12 @@ class RobotIO:
 
     def get_observation(self) -> Observation:
         ur_pos, ur_vel, ur_t = self.ur10e.snapshot()
-        h_pos, h_vel, h_eff, h_t = self.dg5f.snapshot()
+        if self.dg5f is not None:
+            h_pos, h_vel, h_eff, h_t = self.dg5f.snapshot()
+        else:
+            empty = np.zeros(0, dtype=np.float32)
+            h_pos = h_vel = h_eff = empty
+            h_t = 0.0
         state = RobotState(
             ur10e_position=ur_pos,
             ur10e_velocity=ur_vel,
@@ -160,4 +180,5 @@ class RobotIO:
         # dg5f uses a multi-DOF PidController (publisher) — no horizon, just
         # publish the next position reference; PID does the rest.
         self.ur10e.send_joint_position(action.ur10e_position, time_from_start_s)
-        self.dg5f.send_joint_position(action.dg5f_position)
+        if self.dg5f is not None and action.dg5f_position.size > 0:
+            self.dg5f.send_joint_position(action.dg5f_position)

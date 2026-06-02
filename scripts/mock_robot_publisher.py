@@ -63,12 +63,17 @@ class MockRobotPublisher(Node):
         ]
         self.create_timer(1.0 / 50.0, self._tick_ur)
 
-        # dg5f state
-        self._hand_names = list(cfg["dg5f"]["joint_names"])
-        self._hand_pub = self.create_publisher(
-            JointState, cfg["dg5f"]["state_topic"], 30
-        )
-        self.create_timer(1.0 / 300.0, self._tick_hand)
+        # dg5f state — gated on config.dg5f.enabled
+        self._hand_enabled = bool(cfg["dg5f"].get("enabled", True))
+        if self._hand_enabled:
+            self._hand_names = list(cfg["dg5f"]["joint_names"])
+            self._hand_pub = self.create_publisher(
+                JointState, cfg["dg5f"]["state_topic"], 30
+            )
+            self.create_timer(1.0 / 300.0, self._tick_hand)
+        else:
+            self._hand_names = []
+            self._hand_pub = None
 
         # Cameras
         self._cam_pubs: list[tuple[str, int, int, "rclpy.publisher.Publisher"]] = []
@@ -82,7 +87,7 @@ class MockRobotPublisher(Node):
 
         self.get_logger().info(
             f"mock publisher up — UR={cfg['ur10e']['state_topic_teleop']}, "
-            f"dg5f={cfg['dg5f']['state_topic']}, "
+            f"dg5f={'(off)' if not self._hand_enabled else cfg['dg5f']['state_topic']}, "
             f"cams={[c[0] for c in self._cam_pubs]}"
         )
 
@@ -145,8 +150,16 @@ def main() -> None:
         type=Path,
         default=Path("pai_teach/configs/robot.yaml"),
     )
+    p.add_argument(
+        "--dg5f",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="override config.dg5f.enabled (--no-dg5f to mock without the hand)",
+    )
     args = p.parse_args()
     cfg = yaml.safe_load(args.robot_config.read_text())
+    if args.dg5f is not None:
+        cfg["dg5f"]["enabled"] = bool(args.dg5f)
 
     rclpy.init()
     node = MockRobotPublisher(cfg)

@@ -92,6 +92,26 @@ def test_act_yaml_loads_with_consistent_image_keys() -> None:
     assert act_cfg.n_obs_steps == 1, "ACT consumes one observation per chunk"
 
 
+def test_writer_feature_schema_dg5f_off() -> None:
+    """When dg5f is disabled, state/action collapse to UR-only 6-dim."""
+    cfg = _cfg()
+    cams = [
+        CameraInfo(name=c["name"], height=int(c["height"]), width=int(c["width"]))
+        for c in cfg["cameras"]
+    ]
+    writer = LeRobotWriter(
+        repo_id="test/dummy_no_dg5f",
+        root="/tmp/pai_teach_test_unused_2",
+        fps=int(cfg["record_rate_hz"]),
+        ur10e_joint_names=cfg["ur10e"]["joint_names"],
+        dg5f_joint_names=[],  # disabled
+        cameras=cams,
+    )
+    feats = writer._features()
+    assert feats["observation.state"]["shape"] == (6,)
+    assert feats["action"]["shape"] == (6,)
+
+
 def test_recorder_state_to_action_lag_one() -> None:
     """Smoke-test the t->t+1 mapping logic used inside Recorder."""
     from pai_teach.data_recorder.recorder import _state_to_action
