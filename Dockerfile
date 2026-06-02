@@ -76,14 +76,28 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 # requires driver 580+ and fails with "the NVIDIA driver on your system
 # is too old". Installed BEFORE lerobot so its resolver sees torch already
 # satisfied and doesn't try to upgrade us back to cu130.
-# NOTE: --extra-index-url (not --index-url!) so PyPI stays the default and
-# the nvidia-* runtime wheels PyTorch splits out (nvidia-npp-cu12,
-# nvidia-cublas-cu12, …) — needed by torchvision/torchcodec for NPP image
-# ops — are resolvable. With --index-url alone, only the pytorch.org index
-# is consulted and those deps go missing → "libnppicc.so.12 not found".
+# torch + torchvision + torchcodec from cu128 index, with --extra-index-url
+# so PyPI stays default. Some PyTorch wheels declare the nvidia-* runtime
+# wheels (nvidia-npp-cu12 etc.) only weakly, and pip's resolver skips them
+# under `--index-url` alone or with certain extras combinations — so we
+# pin them explicitly. This is what makes `libnppicc.so.12` (used by
+# torchvision/torchcodec NPP image ops) actually land in the image.
 RUN pip install --no-cache-dir \
       --extra-index-url https://download.pytorch.org/whl/cu128 \
-      "torch==2.8.0" "torchvision==0.23.0" "torchcodec==0.5.0"
+      "torch==2.8.0" "torchvision==0.23.0" "torchcodec==0.5.0" \
+      "nvidia-cublas-cu12" \
+      "nvidia-cuda-cupti-cu12" \
+      "nvidia-cuda-nvrtc-cu12" \
+      "nvidia-cuda-runtime-cu12" \
+      "nvidia-cudnn-cu12" \
+      "nvidia-cufft-cu12" \
+      "nvidia-curand-cu12" \
+      "nvidia-cusolver-cu12" \
+      "nvidia-cusparse-cu12" \
+      "nvidia-nccl-cu12" \
+      "nvidia-nvjitlink-cu12" \
+      "nvidia-nvtx-cu12" \
+      "nvidia-npp-cu12"
 
 RUN pip install --no-cache-dir \
       pyyaml \
