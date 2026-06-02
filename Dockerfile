@@ -66,14 +66,20 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 
 # --- Python deps (into the venv) -------------------------------------------
 # lerobot 0.5+ requires numpy>=2.0, but ROS jazzy was built against numpy 1.x
-# — so we keep numpy 2.x in the venv and avoid the one ROS C-extension that
-# can't tolerate that (cv_bridge.boost). Image decode is done in pai_teach
-# via np.frombuffer instead. Everything else (rclpy, sensor_msgs,
-# control_msgs, sensor_msgs_py) is fine across the ABI break.
+# — we keep numpy 2.x and skip the one ROS C-extension that can't tolerate
+# that (cv_bridge.boost). Image decode is done in pai_teach via
+# np.frombuffer instead.
 #
-# Torch wheel embeds its own CUDA runtime; nvidia-container-toolkit only
-# injects the host driver. Both RTX 2080 (sm_75) and RTX 5000-class (sm_89)
-# are within the wheel's supported compute capabilities.
+# Torch is pinned to a CUDA 12.8 wheel so the lowest-common-denominator
+# host driver across our PCs (training PC = 570.x, which supports up to
+# CUDA 12.8) is enough. The default cu130 wheel pip would otherwise pick
+# requires driver 580+ and fails with "the NVIDIA driver on your system
+# is too old". Installed BEFORE lerobot so its resolver sees torch already
+# satisfied and doesn't try to upgrade us back to cu130.
+RUN pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cu128 \
+      "torch==2.8.0" "torchvision==0.23.0"
+
 RUN pip install --no-cache-dir \
       pyyaml \
       opencv-python-headless \
