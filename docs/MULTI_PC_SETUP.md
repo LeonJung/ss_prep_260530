@@ -28,7 +28,26 @@ Nothing required beyond git; pytest is optional for the 6 unit tests.
 
 ### Training PC (10.42.0.1)
 ```bash
-sudo apt install docker.io nvidia-container-toolkit
+# Docker. Two options — pick whichever doesn't conflict with what's already
+# installed (check `dpkg -l | grep -E "docker|containerd"` first):
+#
+# (a) Ubuntu's docker.io (simpler, but conflicts with containerd.io from
+#     Docker's official repo if you've added it before):
+sudo apt install docker.io
+#
+# (b) Docker CE (use this if containerd.io is already installed — common
+#     symptom: "containerd.io Conflicts containerd" during `apt install docker.io`):
+# sudo install -m 0755 -d /etc/apt/keyrings
+# curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+#     sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+#     https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
+#     sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# sudo apt update
+# sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# nvidia-container-toolkit (identical for both options above)
+sudo apt install nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 sudo usermod -aG docker "$USER"        # re-login after this
