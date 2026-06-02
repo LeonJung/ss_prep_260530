@@ -18,6 +18,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
+# --- Host CA bundle (for environments behind an HTTPS-intercepting proxy) --
+# Trust the host's CA bundle before any HTTPS fetch (ROS keyring + pip).
+# On networks without a MITM proxy, leave host-ca-bundle.crt empty:
+#     touch host-ca-bundle.crt
+# update-ca-certificates is a no-op for an empty input, so the build still
+# works. ca-certificates must be installed first so the command exists; that
+# first apt-get update uses http://archive.ubuntu.com so no trust needed.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY host-ca-bundle.crt /usr/local/share/ca-certificates/host-ca-bundle.crt
+RUN update-ca-certificates
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
 # --- ROS2 Jazzy + system deps ----------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl gnupg lsb-release ca-certificates locales software-properties-common \

@@ -54,6 +54,13 @@ sudo usermod -aG docker "$USER"        # re-login after this
 
 git clone git@github.com:LeonJung/ss_prep_260530.git ~/ai_ws
 cd ~/ai_ws
+
+# Corporate HTTPS-intercepting proxy? Drop the host CA bundle into the build
+# context so pip/curl inside the image trust it. Without a proxy, leave the
+# file empty:
+cp /etc/ssl/certs/ca-certificates.crt host-ca-bundle.crt   # MITM proxy env
+# touch host-ca-bundle.crt                                  # plain network
+
 docker build -t pai_teach:latest .     # ~15 min first time
 ```
 

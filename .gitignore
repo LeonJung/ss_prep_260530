@@ -51,3 +51,4 @@ runs/
 # Session / agent state
 SESSION_LOG.md
 .claude/
+host-ca-bundle.crt
