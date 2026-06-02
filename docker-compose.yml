@@ -7,6 +7,11 @@ services:
     image: pai_teach:latest
     network_mode: host
     ipc: host
+    # SYS_NICE lets SVT-AV1 (used by lerobot's mp4 encoder) set thread
+    # priorities and stops the "Failed to set thread priority: invalid
+    # argument" warning. Encoding works without it; this just quiets noise.
+    cap_add:
+      - SYS_NICE
     environment:
       - RMW_IMPLEMENTATION=rmw_zenoh_cpp
       - ROS_DOMAIN_ID=15

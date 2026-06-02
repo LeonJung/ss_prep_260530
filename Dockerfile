@@ -76,8 +76,13 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 # requires driver 580+ and fails with "the NVIDIA driver on your system
 # is too old". Installed BEFORE lerobot so its resolver sees torch already
 # satisfied and doesn't try to upgrade us back to cu130.
+# NOTE: --extra-index-url (not --index-url!) so PyPI stays the default and
+# the nvidia-* runtime wheels PyTorch splits out (nvidia-npp-cu12,
+# nvidia-cublas-cu12, …) — needed by torchvision/torchcodec for NPP image
+# ops — are resolvable. With --index-url alone, only the pytorch.org index
+# is consulted and those deps go missing → "libnppicc.so.12 not found".
 RUN pip install --no-cache-dir \
-      --index-url https://download.pytorch.org/whl/cu128 \
+      --extra-index-url https://download.pytorch.org/whl/cu128 \
       "torch==2.8.0" "torchvision==0.23.0" "torchcodec==0.5.0"
 
 RUN pip install --no-cache-dir \
