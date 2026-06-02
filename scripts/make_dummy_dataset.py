@@ -73,7 +73,7 @@ def main() -> None:
         ur10e_joint_names=ur_names,
         dg5f_joint_names=hand_names,
         cameras=cams,
-        use_videos=True,
+        use_videos=bool(cfg.get("use_videos", True)),
     )
     rng = np.random.default_rng(args.seed)
     for ep in range(args.episodes):

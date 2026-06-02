@@ -76,41 +76,22 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 # requires driver 580+ and fails with "the NVIDIA driver on your system
 # is too old". Installed BEFORE lerobot so its resolver sees torch already
 # satisfied and doesn't try to upgrade us back to cu130.
-# torch + torchvision + torchcodec from cu128 index, with --extra-index-url
-# so PyPI stays default. Some PyTorch wheels declare the nvidia-* runtime
-# wheels (nvidia-npp-cu12 etc.) only weakly, and pip's resolver skips them
-# under `--index-url` alone or with certain extras combinations — so we
-# pin them explicitly. This is what makes `libnppicc.so.12` (used by
-# torchvision/torchcodec NPP image ops) actually land in the image.
+# Step 1 — torch / torchvision from pytorch.org/cu128 ONLY (driver 570
+# compat). Freeze the resolved versions so lerobot can't drag in a fresher
+# cu130 wheel in step 2.
 RUN pip install --no-cache-dir \
-      --extra-index-url https://download.pytorch.org/whl/cu128 \
-      "torch==2.8.0" "torchvision==0.23.0" "torchcodec==0.5.0" \
-      "nvidia-cublas-cu12" \
-      "nvidia-cuda-cupti-cu12" \
-      "nvidia-cuda-nvrtc-cu12" \
-      "nvidia-cuda-runtime-cu12" \
-      "nvidia-cudnn-cu12" \
-      "nvidia-cufft-cu12" \
-      "nvidia-curand-cu12" \
-      "nvidia-cusolver-cu12" \
-      "nvidia-cusparse-cu12" \
-      "nvidia-nccl-cu12" \
-      "nvidia-nvjitlink-cu12" \
-      "nvidia-nvtx-cu12" \
-      "nvidia-npp-cu12"
+      --index-url https://download.pytorch.org/whl/cu128 \
+      torch torchvision \
+    && pip freeze | grep -E "^(torch|torchvision)==" > /etc/pip-constraints.txt \
+    && echo "=== pinned torch stack ===" && cat /etc/pip-constraints.txt
 
-# Register every pip-installed nvidia-*/lib directory with the system
-# dynamic linker. torch itself rewires its dlopen path at `import torch`
-# time, but torchcodec loads its native libraries via libc dlopen which
-# consults /etc/ld.so.cache — without this, `libnppicc.so.12 cannot open
-# shared object file` even though the .so is sitting in venv.
-RUN find /opt/venv/lib/python3.12/site-packages/nvidia \
-        -mindepth 2 -maxdepth 3 -type d -name lib \
-        > /etc/ld.so.conf.d/zzz-nvidia-pip.conf && \
-    ldconfig && \
-    echo "=== ldconfig sees ===" && \
-    ldconfig -p | grep -E "libnppicc|libcudart|libcublas" | head -3
+ENV PIP_CONSTRAINT=/etc/pip-constraints.txt
 
+# Step 2 — pure-Python deps + lerobot from PyPI. torchcodec WILL still be
+# installed here (lerobot[dataset] extra), but we never actually call into
+# it: robot.yaml sets `use_videos: false` so LeRobotDataset stores raw
+# image arrays in parquet instead of mp4. The wheel just sits unused and
+# we side-step the torchcodec ↔ ffmpeg ABI mismatch.
 RUN pip install --no-cache-dir \
       pyyaml \
       opencv-python-headless \
@@ -118,6 +99,20 @@ RUN pip install --no-cache-dir \
       hydra-core \
       omegaconf \
       "lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git"
+
+# Register pip-installed nvidia-*/lib with the system dynamic linker.
+# torch self-patches its dlopen path at import time, but torchcodec loads
+# native libs via libc dlopen and only sees /etc/ld.so.cache — without
+# this, `libnppicc.so.12 cannot open shared object file` even though the
+# wheel landed in venv.
+RUN find /opt/venv/lib/python3.12/site-packages/nvidia \
+        -mindepth 2 -maxdepth 3 -type d -name lib \
+        > /etc/ld.so.conf.d/zzz-nvidia-pip.conf && \
+    ldconfig && \
+    echo "=== ldconfig sees ===" && \
+    ldconfig -p | grep -E "libnppicc|libcudart|libcublas" | head -3 && \
+    echo "=== installed torch/torchcodec ===" && \
+    pip show torch torchcodec 2>/dev/null | grep -E "^(Name|Version)"
 
 # --- ROS2 env auto-source for interactive shells ---------------------------
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /etc/bash.bashrc \

@@ -61,6 +61,7 @@ class Recorder:
             ur10e_joint_names=self._cfg["ur10e"]["joint_names"],
             dg5f_joint_names=dg5f_names,
             cameras=_cameras_from_cfg(self._cfg),
+            use_videos=bool(self._cfg.get("use_videos", True)),
         )
         # Lazy import so this module is importable on dev boxes without rclpy.
         from ..ros2_bridge.robot_io import RobotIO

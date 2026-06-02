@@ -73,3 +73,10 @@ cameras:
 
 # Recorder loop rate. Camera rate is the bottleneck → match it.
 record_rate_hz: 30
+
+# Store frames as raw uint8 arrays in parquet (image dtype) rather than
+# mp4 (video dtype). Set true once the training PC has a torchcodec
+# build that matches its ffmpeg — until then this side-steps the whole
+# torchcodec/ffmpeg ABI matrix at the cost of disk space (~270 MB per
+# 30-frame chunk @ 480×640×3 × 2 cams).
+use_videos: false
