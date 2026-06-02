@@ -99,6 +99,18 @@ RUN pip install --no-cache-dir \
       "nvidia-nvtx-cu12" \
       "nvidia-npp-cu12"
 
+# Register every pip-installed nvidia-*/lib directory with the system
+# dynamic linker. torch itself rewires its dlopen path at `import torch`
+# time, but torchcodec loads its native libraries via libc dlopen which
+# consults /etc/ld.so.cache — without this, `libnppicc.so.12 cannot open
+# shared object file` even though the .so is sitting in venv.
+RUN find /opt/venv/lib/python3.12/site-packages/nvidia \
+        -mindepth 2 -maxdepth 3 -type d -name lib \
+        > /etc/ld.so.conf.d/zzz-nvidia-pip.conf && \
+    ldconfig && \
+    echo "=== ldconfig sees ===" && \
+    ldconfig -p | grep -E "libnppicc|libcudart|libcublas" | head -3
+
 RUN pip install --no-cache-dir \
       pyyaml \
       opencv-python-headless \
