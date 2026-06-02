@@ -78,7 +78,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
 # satisfied and doesn't try to upgrade us back to cu130.
 RUN pip install --no-cache-dir \
       --index-url https://download.pytorch.org/whl/cu128 \
-      "torch==2.8.0" "torchvision==0.23.0"
+      "torch==2.8.0" "torchvision==0.23.0" "torchcodec==0.5.0"
 
 RUN pip install --no-cache-dir \
       pyyaml \
