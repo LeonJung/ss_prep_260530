@@ -12,8 +12,12 @@ cat > /tmp/zenohd-client.json5 <<EOF
 {
   mode: "router",
   connect: { endpoints: ["${CONTROLLER_ROUTER}"] },
+  // Multicast scout MUST stay enabled here — local ROS2 clients on this
+  // host discover our router by multicast. We only disable multicast on
+  // the upstream side (no point scouting across the LAN); we found the
+  // controller PC's router via the explicit 'connect' endpoint above.
   scouting: {
-    multicast: { enabled: false },
+    multicast: { enabled: true },
     gossip: { enabled: true },
   },
 }
