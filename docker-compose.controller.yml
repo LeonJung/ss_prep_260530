@@ -1,0 +1,37 @@
+# Compose file for the CONTROLLER PC (NUC). Uses Dockerfile.controller
+# (Ubuntu 22.04 + ROS Humble) so it speaks the same DDS wire as the
+# native teleop / dg5f / realsense nodes already running on the NUC.
+#
+# Usage:
+#   docker compose -f docker-compose.controller.yml build
+#   docker compose -f docker-compose.controller.yml run --rm pai_teach_ctrl bash
+#
+# Then inside the container (ROS humble auto-sourced):
+#   python -m scripts.record_demo --no-dg5f \
+#       --repo-id local/<name> --root datasets/<name> \
+#       --task <name> --max-seconds 30
+services:
+  pai_teach_ctrl:
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    image: pai_teach_ctrl:latest
+    network_mode: host
+    ipc: host
+    environment:
+      # No RMW override — use ROS humble's default (rmw_fastrtps_cpp),
+      # which is what the host's native teleop/dg5f nodes are using.
+      - ROS_DOMAIN_ID=15
+      - HF_HOME=/workspace/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true

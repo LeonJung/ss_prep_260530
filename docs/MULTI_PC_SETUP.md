@@ -1,230 +1,144 @@
-# Multi-PC ROS2 setup
+# Multi-PC setup (no inter-PC ROS comms)
 
-`pai_teach` runs across three machines:
+We tried zenoh-over-DDS and zenoh native to bridge ROS Humble (controller
+PC) ↔ ROS Jazzy (training PC) and hit wire-protocol mismatches at every
+release boundary. Pivoted to a simpler architecture: **no live ROS link
+between the two PCs at all**. Instead, run the recorder/runner on the
+controller PC (same ROS distro as the teleop nodes, same host so DDS
+multicast trivially works) and ship datasets / checkpoints between PCs
+with rsync.
 
 ```
-┌─────────────────────┐   teleop, sensor pubs   ┌────────────────────┐
-│  Controller PC      │ ────────────────────▶  │  Training PC       │
-│  10.42.0.214        │      zenoh + ROS2       │  10.42.0.1         │
-│  (UR10E teleop,     │     DOMAIN_ID = 15      │  (record_demo,     │
-│   dg5f bringup,     │                         │   train_act,       │
-│   realsense2)       │                         │   run_policy)      │
-└──────────┬──────────┘                         └─────────┬──────────┘
-           │                                              │
-           │ RTDE / Modbus / USB                          │
-           ▼                                              ▼
-  UR10E + dg5f + RealSense                       GPU (RTX 5000-class)
+Dev PC                Controller NUC (Humble, 10.42.0.214)         Training PC (Jazzy, 10.42.0.1)
+──────                ────────────────────────────────────         ──────────────────────────────
+edit + push  ──git──▶ pai_teach_ctrl docker image                  pai_teach docker image
+                      ├─ teleop_unilateral_vive (host)             └─ train_act, GPU
+                      ├─ dg5f_bringup       (host, off for now)
+                      ├─ realsense2_camera  (host)
+                      └─ record_demo / run_policy (in container,
+                         talks DDS to the host's ROS nodes)
+
+                                datasets/   ───── rsync ─────▶  datasets/
+                                checkpoints/ ◀──── rsync ─────  checkpoints/
 ```
 
-The **Dev PC** (this repo's editor) only pushes code. It is not part of
-the runtime ROS2 graph.
+No zenoh, no fastdds discovery-server, no MITM bridge. Same-host DDS
+between the recorder container and the teleop process is rock solid; the
+PCs only exchange parquet/mp4 files and ckpt directories over SSH.
 
 ---
 
 ## One-time install
 
 ### Dev PC
-Nothing required beyond git; pytest is optional for the 6 unit tests.
+Nothing beyond `git`. Tests `python -m pytest tests/` run with no ROS / torch / lerobot.
 
-### Training PC (10.42.0.1)
+### Controller NUC (10.42.0.214, Ubuntu 22.04 + ROS Humble)
 ```bash
-# Docker. Two options — pick whichever doesn't conflict with what's already
-# installed (check `dpkg -l | grep -E "docker|containerd"` first):
-#
-# (a) Ubuntu's docker.io (simpler, but conflicts with containerd.io from
-#     Docker's official repo if you've added it before):
-sudo apt install docker.io
-#
-# (b) Docker CE (use this if containerd.io is already installed — common
-#     symptom: "containerd.io Conflicts containerd" during `apt install docker.io`):
-# sudo install -m 0755 -d /etc/apt/keyrings
-# curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-#     sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-# echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-#     https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
-#     sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-# sudo apt update
-# sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# nvidia-container-toolkit (identical for both options above)
-sudo apt install nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-sudo usermod -aG docker "$USER"        # re-login after this
+# Docker. nvidia-container-toolkit optional — only needed if you'll run
+# run_policy on the NUC's RTX 2060.
+sudo apt install docker.io   # or docker-ce per your existing setup
+sudo usermod -aG docker "$USER"   # re-login
 
 git clone git@github.com:LeonJung/ss_prep_260530.git ~/ai_ws
 cd ~/ai_ws
 
-# Corporate HTTPS-intercepting proxy? Drop the host CA bundle into the build
-# context so pip/curl inside the image trust it. Without a proxy, leave the
-# file empty:
-cp /etc/ssl/certs/ca-certificates.crt host-ca-bundle.crt   # MITM proxy env
-# touch host-ca-bundle.crt                                  # plain network
+# corporate MITM proxy? put the host CA bundle in; otherwise leave empty.
+cp /etc/ssl/certs/ca-certificates.crt host-ca-bundle.crt   # or: touch host-ca-bundle.crt
 
-docker build -t pai_teach:latest .     # ~15 min first time
+docker compose -f docker-compose.controller.yml build      # ~15 min first time
 ```
 
-Verify GPU inside the image:
+### Training PC (10.42.0.1, Ubuntu 24.04 + ROS Jazzy)
 ```bash
-docker run --rm --gpus all pai_teach:latest python3 -c \
-    "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+sudo apt install docker.io nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+sudo usermod -aG docker "$USER"   # re-login
+
+git clone git@github.com:LeonJung/ss_prep_260530.git ~/ai_ws
+cd ~/ai_ws
+cp /etc/ssl/certs/ca-certificates.crt host-ca-bundle.crt   # MITM env
+
+docker compose build pai_teach                              # the jazzy/GPU image
 ```
 
-### Controller PC (10.42.0.214)
-`colcon_ws` (UR) and `hand_ws` (dg5f) are assumed already built. Add zenoh
-+ the env:
-
+### SSH key (one-time)
+From the training PC, copy your SSH key to the controller NUC so the
+sync scripts can rsync without password:
 ```bash
-sudo apt install ros-jazzy-rmw-zenoh-cpp
-
-# Put in ~/.bashrc so every terminal inherits it
-echo 'export RMW_IMPLEMENTATION=rmw_zenoh_cpp' >> ~/.bashrc
-echo 'export ROS_DOMAIN_ID=15'                  >> ~/.bashrc
+ssh-copy-id leon@10.42.0.214
 ```
-
-The training PC's image already bakes both env vars in.
 
 ---
 
 ## Per-session: what runs where
 
-### Controller PC (10.42.0.214)
+### Controller NUC
 
 ```bash
-# Terminal 1 — zenoh router. Multicast scout doesn't cross our switch
-# reliably, so the controller router must dial OUT to the training PC's
-# router rather than wait to be discovered. Helper:
-bash scripts/start_zenohd_controller.sh
-# (default upstream = tcp/10.42.0.1:7447; override with TRAINING_ROUTER env)
-#
-# On the training PC, the bare `ros2 run rmw_zenoh_cpp rmw_zenohd` is
-# enough — controller dials in to it.
-
-# Terminal 2 — UR10E teleop (pick ONE)
-#   (a) UNILATERAL (current default — VIVE tracker → IK):
+# Terminals 1-3 native (no docker): teleop + cameras.
 ros2 launch ur10e_teleop_unilateral_vive_cpp teleop_real.launch.py \
     follower_ip:=169.254.186.92
-#   (b) BILATERAL (force-feedback, needs UR3e leader):
-# ros2 launch ur10e_teleop_real_py teleop_real.launch.py \
-#     leader_ip:=169.254.186.94 follower_ip:=169.254.186.92
-#
-# Both publish /ur10e/follower/joint_state + /ur10e/mode identically;
-# pai_teach is agnostic to which is running.
-
-# Terminal 3 — dg5f right hand  (SKIP while the hand is unplugged;
-# pass --no-dg5f to pai_teach scripts instead, see below)
-# ros2 launch dg5f_hand_bringup dg5f_right_bringup.launch.py \
-#     delto_ip:=169.254.186.72
-
-# Terminal 4 — RealSense D405, one per camera (or compose into a single launch).
-# Serial-number lookup on the controller PC: `rs-enumerate-devices -s`.
 ros2 launch realsense2_camera rs_launch.py \
     camera_name:=wrist_cam serial_no:='"218622270770"'
 ros2 launch realsense2_camera rs_launch.py \
     camera_name:=scene_cam serial_no:='"218622277871"'
+
+# Terminal 4: record_demo inside the controller-side container.
+# Same host = same DDS multicast domain as the native teleop nodes.
+cd ~/ai_ws
+docker compose -f docker-compose.controller.yml run --rm pai_teach_ctrl bash -c \
+    'source /opt/ros/humble/setup.bash && python -m scripts.record_demo --no-dg5f \
+     --repo-id local/<task> --root datasets/<task> \
+     --task <task> --max-seconds 30'
 ```
 
-### Training PC (10.42.0.1)
-
-All commands run inside the docker image. The image auto-sets
-`RMW_IMPLEMENTATION` + `ROS_DOMAIN_ID` and starts in `/workspace` (mounted
-to the repo). ROS needs to be sourced once per shell because
-`/etc/bash.bashrc` only fires for interactive shells.
+### Training PC
 
 ```bash
 cd ~/ai_ws
 
-# First, start the long-running zenoh router. The controller PC dials in
-# to TCP 7447 here, so this must be up before any topic flows. Once per
-# boot:
-docker compose up -d zenohd
-docker compose logs -f zenohd      # optional: tail to confirm "started"
+# 1) Pull the freshly-recorded dataset(s) from the NUC.
+scripts/sync_datasets.sh
 
-# Open an interactive shell in the image (ROS auto-sourced)
-docker compose run --rm pai_teach
-
-# inside the container:
-ros2 topic list | grep -E "(ur10e|dg5f|cam)"        # discovery check
-ros2 topic hz /ur10e/follower/joint_state           # expect ~50 Hz
-ros2 topic hz /wrist_cam/color/image_raw            # expect ~30 Hz
-
-python -m scripts.record_demo --no-dg5f \
-    --repo-id leonjung/pai_teach_demos \
-    --root datasets/pai_teach_demos \
-    --task pick_and_place --max-seconds 30
-
-python -m scripts.train_act \
-    --root datasets/pai_teach_demos \
-    --repo-id leonjung/pai_teach_demos \
-    --batch-size 32                                 # bump on RTX 5000
-
-python -m scripts.run_policy --no-dg5f \
-    --checkpoint checkpoints/act_run/final --max-seconds 30
-```
-
-Or one-shot per command (auto-sources ROS inside `bash -c`):
-```bash
+# 2) Train.
 docker compose run --rm pai_teach bash -c \
-    'source /opt/ros/jazzy/setup.bash && \
-     python -m scripts.record_demo --no-dg5f \
-        --repo-id leonjung/pai_teach_demos \
-        --root datasets/pai_teach_demos \
-        --task pick_and_place --max-seconds 30'
+    'source /opt/ros/jazzy/setup.bash && python -m scripts.train_act \
+     --root datasets/<task> --repo-id local/<task> --batch-size 32'
+
+# 3) Push the trained checkpoint back to the NUC.
+scripts/sync_checkpoints.sh checkpoints/act_run/final/
 ```
 
-### Dev PC (this repo's editor)
+### Controller NUC (deploy)
+
 ```bash
-python -m pytest tests/    # 6 unit tests, no rclpy / torch / lerobot needed
+# Same record_demo container, but run_policy this time.
+docker compose -f docker-compose.controller.yml run --rm pai_teach_ctrl bash -c \
+    'source /opt/ros/humble/setup.bash && python -m scripts.run_policy --no-dg5f \
+     --checkpoint checkpoints/act_run/final --max-seconds 30'
 ```
 
 ---
 
 ## `--dg5f` / `--no-dg5f`
 
-`mock_robot_publisher`, `record_demo`, and `run_policy` all accept
-`--dg5f` / `--no-dg5f` (BooleanOptionalAction). It overrides
-`config.dg5f.enabled` in `robot.yaml`.
-
-| flag | effect |
-|------|--------|
-| (omit) | use `robot.yaml`'s `dg5f.enabled` (default `true`) |
-| `--dg5f` | force enabled (require dg5f topic; 26-dim state/action) |
-| `--no-dg5f` | force disabled (skip dg5f topic + publisher; **6-dim** state/action) |
-
-**Important**: the flag MUST match how the checkpoint was trained.
-`record_demo --no-dg5f` produces a 6-dim dataset → `train_act` produces a
-6-dim policy → `run_policy --no-dg5f` is the only valid deploy. Mixing
-trains a 26-dim policy that crashes on a 6-dim observation.
-
-While the dg5f hardware is unplugged, use `--no-dg5f` everywhere.
+`record_demo` and `run_policy` accept `--dg5f` / `--no-dg5f`
+(BooleanOptionalAction) overriding `config.dg5f.enabled` in `robot.yaml`.
+The flag must match how the checkpoint was trained: a 6-dim policy can't
+deploy on a 26-dim observation and vice versa. While dg5f is unplugged,
+use `--no-dg5f` on both record and deploy.
 
 ---
 
-## Hardware IPs
+## Hardware reference
 
-| Device                 | IP                 | Source                                  |
+| Device                 | IP                 | Notes                                   |
 |------------------------|--------------------|-----------------------------------------|
-| UR10E (follower)       | `169.254.186.92`   | `ur10e_teleop_control_ff_cpp` launches  |
-| UR3e (leader)          | `169.254.186.94`   | same                                    |
-| dg5f right (delto)     | `169.254.186.72`   | `dg5f_hand_bringup` launch default      |
-| dg5f left (delto)      | `169.254.186.73`   | `dg5f_moveit_config` launch (at vendor) |
-
-All robots are on the `169.254.186.0/24` link-local subnet, reached from
-the controller PC over a wired NIC. The training PC does NOT talk
-directly to the robots — only via the controller PC's ROS2 graph over the
-`10.42.0.0/24` network.
-
----
-
-## Network checklist (when discovery breaks)
-
-1. `RMW_IMPLEMENTATION` and `ROS_DOMAIN_ID` set on **every** terminal that
-   runs a ROS2 binary, **before** `ros2` / `python -m scripts.X`. (The
-   docker image bakes them in; controller PC needs them in `~/.bashrc`.)
-2. `rmw_zenohd` is running on the controller PC.
-3. Firewall: zenoh router default port is **TCP 7447** — open it between
-   the two PCs.
-4. `ros2 daemon stop` (and `ros2 daemon start`) after changing
-   `RMW_IMPLEMENTATION` — the daemon caches the discovery middleware.
-5. If `topic list` works but `topic echo` hangs, it's usually a QoS
-   mismatch, not a transport problem.
+| UR10E (follower)       | `169.254.186.92`   | wired NIC on the NUC                    |
+| UR3e (leader, opt)     | `169.254.186.94`   | only when bilateral teleop is on        |
+| dg5f right (delto)     | `169.254.186.72`   | currently unplugged                     |
+| dg5f left (delto)      | `169.254.186.73`   | at vendor for repair                    |
+| RealSense D405 (wrist) | serial `218622270770` |                                       |
+| RealSense D405 (scene) | serial `218622277871` |                                       |

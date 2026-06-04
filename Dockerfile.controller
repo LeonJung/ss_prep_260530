@@ -1,0 +1,89 @@
+# pai_teach controller-PC image: ROS2 Humble + LeRobot.
+#
+# Runs ON THE CONTROLLER PC (Intel NUC, Ubuntu 22.04, ROS humble apt).
+# Same Python entry points as the training PC image (record_demo,
+# run_policy, make_dummy_dataset) but built on the controller's ROS
+# distro so it speaks the same DDS protocol as the locally-running
+# teleop / dg5f / realsense2_camera nodes — no zenoh wire-version
+# mismatch.
+#
+# Build:
+#   docker build -f Dockerfile.controller -t pai_teach_ctrl:latest .
+# Run:
+#   docker compose -f docker-compose.controller.yml run --rm pai_teach_ctrl bash
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    TZ=Asia/Seoul \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+# --- Host CA bundle (corporate MITM proxy) ---------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY host-ca-bundle.crt /usr/local/share/ca-certificates/host-ca-bundle.crt
+RUN update-ca-certificates
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+# --- ROS2 Humble + system deps ---------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl gnupg lsb-release ca-certificates locales software-properties-common \
+      git build-essential pkg-config \
+      python3 python3-pip python3-dev python3-venv \
+      ffmpeg rsync \
+    && locale-gen en_US.UTF-8 \
+    && add-apt-repository universe \
+    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+        http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/ros2.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+      ros-humble-ros-base \
+      ros-humble-control-msgs \
+      ros-humble-trajectory-msgs \
+      ros-humble-sensor-msgs-py \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Isolated Python venv (sees ROS humble system site-packages for rclpy) -
+RUN python3 -m venv --system-site-packages /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}" \
+    VIRTUAL_ENV="/opt/venv"
+RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools
+
+# --- Python deps -----------------------------------------------------------
+# Same cu128/torch pinning as the training image so checkpoints are
+# binary-compatible if the user wants to run inference on the NUC's RTX 2060.
+# NUC's RTX 2060 mobile (sm_75) is within cu128's supported compute caps.
+RUN pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cu128 \
+      torch torchvision \
+    && pip freeze | grep -E "^(torch|torchvision)==" > /etc/pip-constraints.txt
+
+ENV PIP_CONSTRAINT=/etc/pip-constraints.txt
+
+RUN pip install --no-cache-dir \
+      pyyaml \
+      opencv-python-headless \
+      tqdm \
+      hydra-core \
+      omegaconf \
+      "lerobot[dataset] @ git+https://github.com/huggingface/lerobot.git"
+
+# Register pip-installed nvidia-*/lib with the system dynamic linker.
+RUN find /opt/venv/lib/python3.10/site-packages/nvidia \
+        -mindepth 2 -maxdepth 3 -type d -name lib \
+        > /etc/ld.so.conf.d/zzz-nvidia-pip.conf 2>/dev/null || true \
+    && ldconfig
+
+# --- ROS2 env auto-source for interactive shells ---------------------------
+RUN echo "source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc \
+    && echo "export PYTHONPATH=/workspace:\$PYTHONPATH" >> /etc/bash.bashrc
+
+WORKDIR /workspace
+ENV PYTHONPATH=/workspace
+
+CMD ["bash"]
