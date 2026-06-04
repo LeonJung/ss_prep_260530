@@ -1,9 +1,25 @@
-# Single service; run with: `docker compose run --rm pai_teach <cmd>`
-# `network_mode: host` is needed so the in-container ROS2 graph sees
-# topics published on the host (or coming in over zenoh).
+# Two services:
+#   zenohd   — long-running rmw_zenoh_cpp router. The controller PC dials
+#              in to TCP 7447 here, so this MUST be running before any
+#              pai_teach command that touches ROS topics. Start it once:
+#                 docker compose up -d zenohd
+#   pai_teach — interactive runner for scripts. One-shot:
+#                 docker compose run --rm pai_teach <cmd>
+#
+# `network_mode: host` is needed so the controller PC reaches our 7447
+# at 10.42.0.1 (and so the in-container ROS2 graph sees the same host).
 services:
-  pai_teach:
+  zenohd:
     build: .
+    image: pai_teach:latest
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - RMW_IMPLEMENTATION=rmw_zenoh_cpp
+      - ROS_DOMAIN_ID=15
+    command: bash -c 'source /opt/ros/jazzy/setup.bash && exec ros2 run rmw_zenoh_cpp rmw_zenohd'
+
+  pai_teach:
     image: pai_teach:latest
     network_mode: host
     ipc: host
@@ -15,9 +31,8 @@ services:
     environment:
       - RMW_IMPLEMENTATION=rmw_zenoh_cpp
       - ROS_DOMAIN_ID=15
-      # Point zenoh at the controller PC's router explicitly (multicast
-      # discovery is unreliable across most switches).
-      - ZENOH_SESSION_CONFIG_URI=/workspace/zenoh_session_config.json5
+      # The local zenohd above is on the same host, so multicast scout
+      # finds it without needing the explicit session config.
       - HF_HOME=/workspace/.cache/huggingface
       - WANDB_DIR=/workspace/.cache/wandb
     deploy:
@@ -32,3 +47,5 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
+    depends_on:
+      - zenohd

@@ -134,6 +134,12 @@ to the repo). ROS needs to be sourced once per shell because
 ```bash
 cd ~/ai_ws
 
+# First, start the long-running zenoh router. The controller PC dials in
+# to TCP 7447 here, so this must be up before any topic flows. Once per
+# boot:
+docker compose up -d zenohd
+docker compose logs -f zenohd      # optional: tail to confirm "started"
+
 # Open an interactive shell in the image (ROS auto-sourced)
 docker compose run --rm pai_teach
 
