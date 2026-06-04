@@ -91,8 +91,14 @@ The training PC's image already bakes both env vars in.
 ### Controller PC (10.42.0.214)
 
 ```bash
-# Terminal 1 — zenoh router (leave running; restart if you reboot)
-ros2 run rmw_zenoh_cpp rmw_zenohd
+# Terminal 1 — zenoh router. Multicast scout doesn't cross our switch
+# reliably, so the controller router must dial OUT to the training PC's
+# router rather than wait to be discovered. Helper:
+bash scripts/start_zenohd_controller.sh
+# (default upstream = tcp/10.42.0.1:7447; override with TRAINING_ROUTER env)
+#
+# On the training PC, the bare `ros2 run rmw_zenoh_cpp rmw_zenohd` is
+# enough — controller dials in to it.
 
 # Terminal 2 — UR10E teleop (pick ONE)
 #   (a) UNILATERAL (current default — VIVE tracker → IK):
