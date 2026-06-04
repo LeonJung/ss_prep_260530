@@ -110,11 +110,12 @@ ros2 launch ur10e_teleop_unilateral_vive_cpp teleop_real.launch.py \
 # ros2 launch dg5f_hand_bringup dg5f_right_bringup.launch.py \
 #     delto_ip:=169.254.186.72
 
-# Terminal 4 — RealSense, one per camera (or compose into a single launch)
+# Terminal 4 — RealSense D405, one per camera (or compose into a single launch).
+# Serial-number lookup on the controller PC: `rs-enumerate-devices -s`.
 ros2 launch realsense2_camera rs_launch.py \
-    camera_name:=wrist_cam serial_no:='"<wrist serial>"'
+    camera_name:=wrist_cam serial_no:='"218622270770"'
 ros2 launch realsense2_camera rs_launch.py \
-    camera_name:=scene_cam serial_no:='"<scene serial>"'
+    camera_name:=scene_cam serial_no:='"218622277871"'
 ```
 
 ### Training PC (10.42.0.1)
