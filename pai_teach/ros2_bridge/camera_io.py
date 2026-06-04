@@ -17,7 +17,17 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 from rclpy.node import Node
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
+
+# RealSense (and most camera drivers) publish images with BEST_EFFORT
+# reliability. A default RELIABLE subscription silently fails to receive
+# anything from them — symptom: wait_until_ready timeout on "cameras".
+_CAMERA_QOS = QoSProfile(
+    depth=5,
+    reliability=ReliabilityPolicy.BEST_EFFORT,
+    history=HistoryPolicy.KEEP_LAST,
+)
 
 
 @dataclass
@@ -63,11 +73,11 @@ class _SingleCameraIO:
 
         if spec.compressed:
             self._sub = node.create_subscription(
-                CompressedImage, spec.topic, self._on_compressed, 5
+                CompressedImage, spec.topic, self._on_compressed, _CAMERA_QOS
             )
         else:
             self._sub = node.create_subscription(
-                Image, spec.topic, self._on_image, 5
+                Image, spec.topic, self._on_image, _CAMERA_QOS
             )
 
     def _on_image(self, msg: Image) -> None:
