@@ -23,6 +23,12 @@ cat > /tmp/zenohd-controller.json5 <<EOF
     multicast: { enabled: true },
     gossip: { enabled: true },
   },
+  // Disable POSIX SHM transport for consistency with the training-PC
+  // client config; SHM is a same-host optimization, multi-PC traffic
+  // doesn't use it, and it has caused rclpy.init to fail in containers.
+  transport: {
+    shared_memory: { enabled: false },
+  },
 }
 EOF
 

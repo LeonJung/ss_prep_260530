@@ -20,4 +20,13 @@
       enabled: true,
     },
   },
+  // Disable POSIX shared-memory transport. It's a same-host optimization
+  // and inside docker (with ipc: host) it sometimes fails to create a
+  // provider — symptom: "Failed to create POSIX SHM provider" on
+  // rclpy.init. Multi-PC traffic goes over TCP/zenoh either way.
+  transport: {
+    shared_memory: {
+      enabled: false,
+    },
+  },
 }
