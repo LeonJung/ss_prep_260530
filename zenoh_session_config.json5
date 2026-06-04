@@ -1,0 +1,23 @@
+// rmw_zenoh_cpp session config for the training PC.
+// We can't rely on UDP multicast scout to find the router on the
+// controller PC (10.42.0.214) — many switches drop multicast — so list
+// the router endpoint explicitly here and disable multicast scout so we
+// don't waste time waiting on it.
+//
+// Point ROS at this file via:
+//   export ZENOH_SESSION_CONFIG_URI=$(pwd)/zenoh_session_config.json5
+// (already done inside the pai_teach docker image via docker-compose env)
+{
+  mode: "client",
+  connect: {
+    endpoints: ["tcp/10.42.0.214:7447"],
+  },
+  scouting: {
+    multicast: {
+      enabled: false,
+    },
+    gossip: {
+      enabled: true,
+    },
+  },
+}

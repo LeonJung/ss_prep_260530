@@ -15,6 +15,9 @@ services:
     environment:
       - RMW_IMPLEMENTATION=rmw_zenoh_cpp
       - ROS_DOMAIN_ID=15
+      # Point zenoh at the controller PC's router explicitly (multicast
+      # discovery is unreliable across most switches).
+      - ZENOH_SESSION_CONFIG_URI=/workspace/zenoh_session_config.json5
       - HF_HOME=/workspace/.cache/huggingface
       - WANDB_DIR=/workspace/.cache/wandb
     deploy:
