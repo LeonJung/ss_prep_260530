@@ -15,6 +15,7 @@ import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
 
@@ -45,8 +46,11 @@ class UR10EIO:
         # because incoming order is not guaranteed.
         self._name_to_idx: dict[str, int] | None = None
 
+        # SENSOR_DATA = BEST_EFFORT + KEEP_LAST(5). Matches both default
+        # RELIABLE and SENSOR_DATA publishers; default RELIABLE subscribers
+        # silently miss every message from a BEST_EFFORT teleop publisher.
         self._sub = node.create_subscription(
-            JointState, state_topic, self._on_joint_state, 10
+            JointState, state_topic, self._on_joint_state, qos_profile_sensor_data
         )
 
         self._action_client = None  # lazily created in deploy mode

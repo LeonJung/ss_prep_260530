@@ -19,6 +19,7 @@ import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
 
@@ -43,8 +44,9 @@ class DG5FIO:
         self._name_to_idx: dict[str, int] | None = None
         self._canonical_idx = {n: i for i, n in enumerate(self._joint_names)}
 
+        # SENSOR_DATA QoS (BEST_EFFORT, KEEP_LAST 5) — see ur10e_io.py.
         self._sub = node.create_subscription(
-            JointState, state_topic, self._on_joint_state, 30
+            JointState, state_topic, self._on_joint_state, qos_profile_sensor_data
         )
 
         self._cmd_pub = None
