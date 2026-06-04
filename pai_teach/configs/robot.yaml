@@ -2,9 +2,12 @@
 # Both ros2_bridge and data_recorder read this — keep names exact.
 
 ur10e:
-  # Record-time state (teleop running): published by ur10e_teleop_real_py
-  state_topic_teleop: /ur10e/follower/joint_state
-  # Deploy-time state (ros2_control native)
+  # Record-time state (teleop running): published by ur10e_teleop_real_py /
+  # ur10e_teleop_unilateral_vive_cpp with the bimanual `/right/` prefix in
+  # the current lab setup. Single-arm-right operation for now.
+  state_topic_teleop: /ur10e/right/follower/joint_state
+  # Deploy-time state (ros2_control native) — confirm once ur10e_bringup
+  # runs, may need `/ur10e/right/joint_states` or similar prefix.
   state_topic_deploy: /joint_states
   # Deploy-time command (JTC action)
   command_action: /joint_trajectory_controller/follow_joint_trajectory
@@ -56,16 +59,16 @@ dg5f:
   dof: 20
 
 cameras:
-  # Topic names assume realsense2_camera launched with camera_name=<key>.
-  # Confirm at bringup time on the training PC and update if different.
+  # realsense2_camera launched with `camera_name:=wrist_cam` (and default
+  # namespace `camera`) → /camera/wrist_cam/color/image_raw.
   - name: wrist_cam
-    topic: /wrist_cam/color/image_raw
-    compressed: false               # true -> /wrist_cam/color/image_raw/compressed
+    topic: /camera/wrist_cam/color/image_raw
+    compressed: false
     width: 640
     height: 480
     rate_hz: 30
   - name: scene_cam
-    topic: /scene_cam/color/image_raw
+    topic: /camera/scene_cam/color/image_raw
     compressed: false
     width: 640
     height: 480
