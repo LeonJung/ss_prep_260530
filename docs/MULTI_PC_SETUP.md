@@ -71,16 +71,21 @@ bash scripts/start_zenohd_controller.sh
 ros2 launch ur10e_teleop_unilateral_vive_cpp teleop_real.launch.py \
     follower_ip:=169.254.186.92
 
-# Terminal 3 / 4 — RealSense D405. Drop the color profile to 424x240
-# (D405 native option) so each frame is ~305 KB instead of 1.22 MB
-# — keeps the recorder loop near 30 Hz over zenoh. ACT resizes to
-# ~224x224 internally anyway.
+# Terminal 3 / 4 — RealSense D405. Two settings together:
+#  - rgb_camera.color_profile:=424x240x30  → ~305 KB/frame (1.22 MB at
+#    848x480 was overrunning the NUC's USB controller; symptom was
+#    "no frames 5 sec" cutouts in the realsense node logs).
+#  - enable_depth:=false enable_infra1:=false enable_infra2:=false →
+#    we only need RGB for ACT, and these other streams compete for the
+#    same USB bandwidth.
 ros2 launch realsense2_camera rs_launch.py \
     camera_name:=wrist_cam serial_no:='"218622270770"' \
-    rgb_camera.color_profile:=424x240x30
+    rgb_camera.color_profile:=424x240x30 \
+    enable_depth:=false enable_infra1:=false enable_infra2:=false
 ros2 launch realsense2_camera rs_launch.py \
     camera_name:=scene_cam serial_no:='"218622277871"' \
-    rgb_camera.color_profile:=424x240x30
+    rgb_camera.color_profile:=424x240x30 \
+    enable_depth:=false enable_infra1:=false enable_infra2:=false
 ```
 
 ### Training PC (10.42.0.1)
