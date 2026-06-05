@@ -71,11 +71,16 @@ bash scripts/start_zenohd_controller.sh
 ros2 launch ur10e_teleop_unilateral_vive_cpp teleop_real.launch.py \
     follower_ip:=169.254.186.92
 
-# Terminal 3 / 4 — RealSense D405
+# Terminal 3 / 4 — RealSense D405. Drop the color profile to 424x240
+# (D405 native option) so each frame is ~305 KB instead of 1.22 MB
+# — keeps the recorder loop near 30 Hz over zenoh. ACT resizes to
+# ~224x224 internally anyway.
 ros2 launch realsense2_camera rs_launch.py \
-    camera_name:=wrist_cam serial_no:='"218622270770"'
+    camera_name:=wrist_cam serial_no:='"218622270770"' \
+    rgb_camera.color_profile:=424x240x30
 ros2 launch realsense2_camera rs_launch.py \
-    camera_name:=scene_cam serial_no:='"218622277871"'
+    camera_name:=scene_cam serial_no:='"218622277871"' \
+    rgb_camera.color_profile:=424x240x30
 ```
 
 ### Training PC (10.42.0.1)

@@ -61,17 +61,24 @@ dg5f:
 cameras:
   # realsense2_camera launched with `camera_name:=wrist_cam` (and default
   # namespace `camera`) → /camera/wrist_cam/color/image_raw.
+  # Publish at 424x240 so per-frame size drops from 1.22 MB to ~305 KB
+  # (~9 MB/s/cam over zenoh), keeping the recorder loop near 30 Hz.
+  # ACT will resize this further internally to ~224x224 anyway.
+  # NUC launch:
+  #   ros2 launch realsense2_camera rs_launch.py \\
+  #       camera_name:=wrist_cam serial_no:='"218622270770"' \\
+  #       rgb_camera.color_profile:=424x240x30
   - name: wrist_cam
     topic: /camera/wrist_cam/color/image_raw
     compressed: false
-    width: 640
-    height: 480
+    width: 424
+    height: 240
     rate_hz: 30
   - name: scene_cam
     topic: /camera/scene_cam/color/image_raw
     compressed: false
-    width: 640
-    height: 480
+    width: 424
+    height: 240
     rate_hz: 30
 
 # Recorder loop rate. Camera rate is the bottleneck → match it.
