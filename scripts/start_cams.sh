@@ -16,4 +16,8 @@ if [ ! -f "$LAUNCH_FILE" ]; then
     exit 1
 fi
 
-exec ros2 launch "$LAUNCH_FILE"
+# CAMS env: both (default) | wrist | scene — use single-camera to test
+# whether USB controller saturation is the cause of the 5-sec frame
+# cutouts:
+#   CAMS=wrist bash scripts/start_cams.sh
+exec ros2 launch "$LAUNCH_FILE" cams:="${CAMS:-both}"
