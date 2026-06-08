@@ -81,8 +81,13 @@ cameras:
     height: 240
     rate_hz: 30
 
-# Recorder loop rate. Camera rate is the bottleneck → match it.
-record_rate_hz: 30
+# Recorder loop rate. Camera publishes at 30 Hz but the NUC's USB
+# controller drops some frames when both D405s share a single root hub
+# — observed 568 frames in 30s (~19 Hz) at record_rate_hz=30. Set 15
+# so every loop tick has a fresh image and the dataset is uniformly
+# spaced. Bump back to 30 once the cameras are on separate USB ports
+# (see [[project-todos]]).
+record_rate_hz: 15
 
 # Store frames as raw uint8 arrays in parquet (image dtype) rather than
 # mp4 (video dtype). Set true once the training PC has a torchcodec
