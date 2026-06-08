@@ -39,15 +39,15 @@ def _params(serial: str, camera_name: str) -> dict:
         "enable_pointcloud": False,
         "enable_accel": False,
         "enable_gyro": False,
-        # Force 424x240 @ 30. The correct realsense2_camera parameter
-        # name is `rgb_camera.profile` (NOT `rgb_camera.color_profile` —
-        # that's the wrong name that gets silently ignored, see
-        # realsense-ros issues #3112 and #3306). D405's native color
-        # resolutions are 1280x720, 848x480, 640x480, 424x240; 480x270
-        # is D435 territory and the D405 silently falls back to default
-        # 848x480 when asked for it.
-        "rgb_camera.profile": "424x240x30",
-        "rgb_camera.color_format": "RGB8",
+        # D405 puts ALL stream profiles (color, depth, infra) under
+        # `depth_module.*`, NOT under `rgb_camera.*` like the D435 family.
+        # Verified with `ros2 param list /camera/<name> | grep profile`
+        # on this hardware: the only profile params that exist are
+        #   depth_module.color_profile / .depth_profile / .infra_profile
+        # D405 advertises color modes 424x240, 480x270, 640x360, 640x480,
+        # 848x480, 1280x720 — all RGB8. We pick the smallest that's
+        # comfortably above ACT's typical 224x224 resize.
+        "depth_module.color_profile": "424x240x30",
     }
 
 
