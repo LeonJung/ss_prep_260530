@@ -71,14 +71,14 @@ cameras:
   - name: wrist_cam
     topic: /camera/wrist_cam/color/image_raw
     compressed: false
-    width: 424
-    height: 240
+    width: 480
+    height: 270
     rate_hz: 30
   - name: scene_cam
     topic: /camera/scene_cam/color/image_raw
     compressed: false
-    width: 424
-    height: 240
+    width: 480
+    height: 270
     rate_hz: 30
 
 # Recorder loop rate. Camera rate is the bottleneck → match it.
