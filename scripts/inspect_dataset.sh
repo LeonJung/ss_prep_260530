@@ -1,63 +1,50 @@
 #!/usr/bin/env bash
-# Quick look at a recorded LeRobotDataset.
-# Prints file layout, meta/info.json (fps, episode/frame counts,
-# feature schema), and stats summary so we can verify state vector
-# shape, image dtype/shape, and per-channel ranges look sane.
+# Compact one-shot dataset summary. Prints only the fields we actually
+# need to verify a recorded LeRobotDataset:
+#   fps, total_episodes, total_frames, feature names + dtype + shape,
+#   and per-column shape/dtype of the first parquet row.
 #
 # Usage:
 #   docker compose run --rm pai_teach bash scripts/inspect_dataset.sh datasets/<task>
 set -e
 DATASET="${1:?usage: bash scripts/inspect_dataset.sh <dataset_root>}"
 
-echo "=== files (top 20) ==="
-find "$DATASET" -type f -not -path "*/cache/*" 2>/dev/null | head -20
+python3 - <<EOF
+import glob, json
+from pathlib import Path
+import pyarrow.parquet as pq
 
-echo
-echo "=== meta/info.json ==="
-cat "$DATASET/meta/info.json" 2>/dev/null || echo "(missing)"
+root = Path("$DATASET")
+info = json.loads((root / "meta" / "info.json").read_text())
+print(f"fps             : {info.get('fps')}")
+print(f"total_episodes  : {info.get('total_episodes')}")
+print(f"total_frames    : {info.get('total_frames')}")
+print(f"data_path       : {info.get('data_path')}")
+print(f"video_path      : {info.get('video_path')}")
+print("features:")
+for k, f in info.get("features", {}).items():
+    print(f"  {k:35s} dtype={f.get('dtype'):<8s} shape={tuple(f.get('shape', ()))}")
 
-echo
-echo "=== meta/stats.json (first 60 lines) ==="
-head -60 "$DATASET/meta/stats.json" 2>/dev/null || echo "(missing)"
-
-echo
-echo "=== meta/tasks.parquet ==="
-python3 -c "
-import sys
-try:
-    import pyarrow.parquet as pq
-    t = pq.read_table('$DATASET/meta/tasks.parquet').to_pandas()
-    print(t.to_string(max_rows=10))
-except Exception as e:
-    print(f'(skip: {e})')
-"
-
-echo
-echo "=== first frame sample ==="
-python3 -c "
-import sys
-try:
-    import pyarrow.parquet as pq
-    import glob
-    f = sorted(glob.glob('$DATASET/data/chunk-*/file-*.parquet'))[0]
-    t = pq.read_table(f).to_pandas()
-    print(f'parquet shape: {t.shape}, columns: {list(t.columns)}')
-    row = t.iloc[0]
-    for col in t.columns:
-        val = row[col]
-        kind = type(val).__name__
+files = sorted(glob.glob(str(root / "data" / "chunk-*" / "file-*.parquet")))
+if not files:
+    print("\n(no parquet data files found)")
+else:
+    print(f"\nfirst parquet: {Path(files[0]).relative_to(root)}")
+    t = pq.read_table(files[0])
+    row = t.to_pandas().iloc[0]
+    print(f"  rows={t.num_rows}  cols={t.num_columns}")
+    for col in t.column_names:
+        v = row[col]
         try:
             import numpy as np
-            if isinstance(val, np.ndarray):
-                print(f'  {col}: ndarray shape={val.shape} dtype={val.dtype}')
-                continue
-        except Exception:
-            pass
-        try:
-            n = len(val)
-            print(f'  {col}: {kind} len={n} first={val[0] if n else None!r}')
-        except Exception:
-            print(f'  {col}: {kind} value={val!r}')
-except Exception as e:
-    print(f'(failed: {e})')
-"
+            if isinstance(v, np.ndarray):
+                print(f"    {col:35s} ndarray shape={v.shape} dtype={v.dtype}")
+            elif hasattr(v, "__len__") and not isinstance(v, str):
+                print(f"    {col:35s} list len={len(v)} elem0_type={type(v[0]).__name__ if len(v) else '-'}")
+            else:
+                s = repr(v)
+                if len(s) > 40: s = s[:37] + "..."
+                print(f"    {col:35s} {type(v).__name__}={s}")
+        except Exception as e:
+            print(f"    {col:35s} ({e})")
+EOF
